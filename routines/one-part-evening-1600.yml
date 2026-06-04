@@ -1,0 +1,72 @@
+# routines/one-part-evening-1600.yml
+# ---
+# Claude.ai Routine spec for the 16:00 AEST One Part evening prompt.
+#
+# Use this YAML to create the Claude.ai Schedule that drives the One Part
+# editorial flow. Either set up the routine manually via Claude.ai's UI using
+# the values below, or use the `schedule` skill to create it programmatically:
+#
+#     /schedule create --spec routines/one-part-evening-1600.yml
+#
+# Once active, the routine fires daily at 16:00 Australia/Melbourne. It
+# triggers the bolst-stocklist-engine skill with the prompt below, which in
+# turn invokes the one-part-prompt sub-skill — sending Tom (or, during
+# build phase, Inam) the Specialised candidate list as an HTML email.
+
+name: bolst-one-part-evening
+description: >
+  Email Tom (or Inam during build phase) tomorrow's Specialised stocklist
+  as candidate One Part Contract picks. Tom replies with the lots he wants
+  promoted; the morning poll routine reads his reply at 06:30 AEST.
+
+schedule:
+  cron: "0 16 * * 1-5"           # Mon-Fri at 16:00 local (skip Sat/Sun)
+  timezone: Australia/Melbourne   # DST handled automatically
+
+skill: bolst-stocklist-engine
+sub_skill: one-part-prompt
+
+prompt: |
+  Run the bolst-stocklist-engine evening One Part prompt.
+
+  1. Locate today's most recent Specialised Home Constructions stocklist PDF
+     (sender: nlimbo@specialisedhomeconstructions.com.au). During build phase
+     the fixture path is acceptable; production reads live via lib/graph_read.py
+     once Stage 9.8 lands.
+
+  2. Invoke skills/one-part-prompt/send_evening_prompt.py with the PDF path.
+     The script will:
+       - parse the PDF via lib/parsers/specialised.py
+       - filter to is_one_part=False rows (the editorial-pick candidates)
+       - group by (suburb, estate)
+       - render an HTML email body with one table per group
+       - send via Microsoft Graph from Tom's Outlook to the recipient in
+         BOLST_ONE_PART_RECIPIENT (falls back to BOLST_REPORT_RECIPIENT).
+         In production this is Tom — he replies on the thread.
+       - subject: `[Bolst One Part — YYYY-MM-DD]` where YYYY-MM-DD is
+         TOMORROW's date (the report date this prompt feeds, NOT today)
+
+  3. On success: log "Evening prompt sent to {recipient} with {N} groups".
+  4. On failure: alert via the channel configured in .env. Do not retry
+     automatically — Tom's manual reply still has 14+ hours of slack before
+     the 06:30 morning poll runs.
+
+on_success:
+  log: "evening_prompt_sent"
+  notify: false
+
+on_failure:
+  log: "evening_prompt_failed"
+  notify: inam@meetapex.ai
+
+# Phase / handover transitions
+notes: |
+  Recipient = BOLST_ONE_PART_RECIPIENT env var (Routine secret). In
+  production this is Tom directly so he can reply on the thread. No code
+  changes to move it.
+
+  Subject prefix `[Bolst One Part —` is load-bearing — the morning report
+  finds Tom's reply by matching on it (lib/one_part_collect.collect_picks,
+  searching "subject:Bolst One Part"). Don't change the prefix without
+  updating that search in lockstep. (The old 06:30 poll routine that used
+  to do this matching is deprecated — folded into the 07:00 report.)

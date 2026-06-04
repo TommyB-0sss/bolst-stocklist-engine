@@ -1,0 +1,15 @@
+# Secrets and runtime credentials
+.env
+.credentials/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Engine output (generated PDFs, run logs)
+output/
+
+# Cached mailbox downloads (live builder PDFs/XLSX from Tom's Outlook)
+.cache/

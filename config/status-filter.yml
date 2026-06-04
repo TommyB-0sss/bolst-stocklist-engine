@@ -1,0 +1,36 @@
+# config/status-filter.yml
+# ---
+# Status values that cause a row to be DROPPED from the morning report.
+# Matching is case-insensitive — lib/status_filter.py uppercases both
+# sides at lookup, so listing each variant is unnecessary.
+#
+# Anything NOT on this list (including blank/None status) is KEPT.
+# This is a forward-compatible DROP-list, not an allow-list: if a
+# builder invents a new status value, it defaults to keep rather than
+# silently disappearing from the report.
+#
+# Last reviewed: 2026-05-08 with Inam.
+
+drop_if_status_in:
+  - Sold
+  - Contract Signed
+  - Contract Issue
+  - Contract Issued
+
+# Edge cases explicitly NOT on the drop list (per Inam 2026-05-08):
+#   "Contact signed"   (Luxton typo for Contract Signed) — not dropped.
+#                      Tom can ask Stefan to fix the source, or we add
+#                      this entry later.
+#   "Reserved"         (Aplace ~12 rows/week) — kept.
+#   "Hold" / "HOLD" / "On Hold"  (Aldrich, Luxton) — kept.
+#   "Not Available"    (Aldrich) — kept.
+#   "Resale"           (Aldrich) — kept (back on market).
+#   "Exclusive"        (Aldrich) — kept (Aldrich-exclusive deal).
+#   "EOI"              (Luxton, Superlots) — kept (still available; just
+#                      flagging strong interest).
+#   blank / None       (Specialised, Urbane, occasional Luxton) — kept,
+#                      treated as implicit Available.
+#
+# Updated 2026-05-09 with Inam: "Contract Issue" / "Contract Issued"
+# now dropped (previously kept). Reverses the 2026-05-08 stance — these
+# are no longer counted as available stock.

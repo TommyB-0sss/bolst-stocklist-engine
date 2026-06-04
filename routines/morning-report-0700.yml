@@ -1,0 +1,93 @@
+# routines/morning-report-0700.yml
+# ---
+# Claude.ai Routine spec for the 07:00 AEST morning report (Tue-Sat).
+#
+# Tom receives the daily morning report Tuesday through Saturday at 07:00.
+# Each morning's report covers the previous WEEKDAY's data (Tue=Mon's data,
+# Wed=Tue's, Thu=Wed's, Fri=Thu's, Sat=Fri's). No reports on Sun or Mon
+# morning — Tom enjoys a quiet inbox over the weekend.
+#
+# Use this YAML to create the Claude.ai Schedule. Either set up the
+# routine manually via the UI using the values below, or use the
+# `schedule` skill to create it programmatically:
+#
+#     /schedule create --spec routines/morning-report-0700.yml
+
+name: bolst-morning-report
+description: >
+  Send Tom (or Inam during build phase) the daily branded stocklist PDF.
+  Reads all 6 builders LIVE from Tom's Outlook, applies any One Part
+  picks Tom replied with overnight (via the 06:30 morning poll), routes
+  + filters + renders + sends. Skips Sun + Mon morning.
+
+schedule:
+  cron: "0 7 * * 2-6"            # Tue-Sat at 07:00 local
+  timezone: Australia/Melbourne   # DST handled automatically
+
+skill: bolst-stocklist-engine
+sub_skill: compose-and-send
+
+prompt: |
+  Run the bolst-stocklist-engine morning report.
+
+  1. Compute today's report date in Australia/Melbourne (YYYY-MM-DD).
+
+  2. Invoke skills/compose-and-send/send_report.py. The script will:
+       - fetch all 6 builders live from Tom's Outlook
+         (Specialised + Aldrich + Urbane + Hermitage + Aplace + Luxton)
+       - read Tom's overnight One Part reply INLINE via
+         lib.one_part_collect.collect_picks (searches Tom's Outlook for
+         his reply to yesterday's [Bolst One Part - <date>] prompt). No
+         separate 06:30 poll / .cache file — that handoff was removed
+         2026-06-02 because Routines are stateless. If no reply is found,
+         only the auto-flagged Hermitage/Luxton One Part rows show.
+       - apply picks via lib.pick_apply.apply_picks (sets
+         is_one_part=True on the matching Specialised rows)
+       - route + status filter (existing Stage 7)
+       - render the branded PDF with one_part_notice banner
+       - send via Microsoft Graph from Tom's Outlook to the recipient
+         in delivery.yml (build phase: inam@meetapex.ai; mature phase:
+         tom@bolstpropertygroup.com.au)
+
+  3. Subject: "Bolst Stocklist - {Day} {DayOfMonth} {Month}" (e.g.
+     "Bolst Stocklist - Tue 12 May").
+
+  4. Per-builder failure tolerance: if one of the 6 BUILDERS fails to
+     ingest (transient HTTP, format change), the report ships with the
+     remaining 5/6 and notes the missing builder in the email body.
+
+  5. REA listings are MANDATORY (2026-06-02): REA is a weekly file (Tom
+     emails himself the CSV each Monday, reused all week). The report uses
+     the most recent REA CSV regardless of age, but if NONE is found at
+     all the report is HELD (not sent) and on_failure alerts. This is the
+     one ingest that can block the whole report.
+
+  6. Catastrophic failures (auth lapse, render exception) abort and
+     alert via on_failure below.
+
+on_success:
+  log: "morning_report_sent"
+  notify: false
+
+on_failure:
+  log: "morning_report_failed"
+  notify: inam@meetapex.ai
+
+# Phase / handover transitions
+notes: |
+  Build phase (current): recipient = inam@meetapex.ai. Sender =
+  tom@bolstpropertygroup.com.au (live OAuth grant from Stage 1.6).
+
+  Mature phase: flip the recipient by setting the BOLST_REPORT_RECIPIENT
+  env var (Routine secret) to tom@bolstpropertygroup.com.au — zero code
+  changes. NOTE: send_report.py reads BOLST_REPORT_RECIPIENT from the
+  environment; delivery.yml's `recipient:` field is a human-readable
+  summary only and is NOT read by the orchestrator.
+
+  Phase 1.5: Tom + Aaron Wilson + Howard Rock fan-out — adds reps via
+  reps.yml and bcc / per-rep send loop.
+
+  Cron note: 2-6 = Tue-Sat (cron day-of-week 0=Sun, 1=Mon, ...).
+  Designed to align with the Mon-Fri evening-prompt schedule:
+  Mon prompt -> Tue report; Tue prompt -> Wed report; ...; Fri
+  prompt -> Sat report.

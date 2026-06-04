@@ -1,0 +1,163 @@
+# builders.yml
+# ---
+# Maps incoming emails to a builder + parser strategy.
+#
+# Updated 2026-05-08 after surveying Tom's live Outlook (`tom@bolstpropertygroup.com.au`).
+# Sender addresses are now the primary identification signal (live mailbox preserves
+# original From: headers). filename_patterns and subject_filter are defensive layers
+# for senders who also send non-stocklist content.
+#
+# Ingestion modes:
+#   attachment  (default)  — parse the file attached to the email
+#   html_link              — email has NO attachment; the PDF lives behind a link in the
+#                            HTML body and must be fetched from a CDN
+#
+# Routing destinations (which tab the parsed row lands on):
+#   regional   — route via suburbs.yml region map
+#   one_part   — One Part Contracts tab (file-level override OR row-level tag from parser)
+#   manual     — One Part Specialised tab; rows curated by Tom's evening reply (Specialised only)
+#
+# Routing dict keys are filename globs; first match wins (YAML insertion order).
+
+builders:
+
+  specialised:
+    sender: nlimbo@specialisedhomeconstructions.com.au
+    ingestion: attachment
+    filename_patterns:
+      - "Stocklist*.pdf"
+    parser: parsers/specialised.py
+    routing:
+      default: regional
+      one_part: manual          # see one-part-collect/ — picks come from Tom's evening reply
+
+  aplace:
+    sender: aplacevic@aplace.com.au
+    ingestion: html_link            # changed from `attachment` 2026-05-09 — live verification
+    # aplacevic is the canonical broadcast sender. Stephanie.Leclerc@aplace.com.au also
+    # emails per-package PDFs ad-hoc — those are spotlights, not stocklists; ignored in Phase 1.
+    subject_filter: "House & Land Opportunities"   # weekly stocklist subject; skips
+                                                    # "Package of the Week" + "100% commission" promo emails
+    link_strategy:
+      # Aplace ships TWO stocklists in one email via Campaign Monitor (cmail19) tracking links.
+      # Each button text -> one PDF. Tracking URLs redirect to public PDFs on aplace.com.au CDN.
+      buttons:
+        - text_contains: "Victoria Stocklist"
+          filename: "Aplace-Victoria-Stocklist.pdf"
+        - text_contains: "100% Upfront commission"
+          filename: "Aplace-Upfront-Commission-Stocklist.pdf"
+    filename_patterns:
+      - "Aplace*GENERAL*Stock-List*.pdf"
+      - "Aplace*GENERAL-Put-Call*Stock-List*.pdf"
+    parser: parsers/aplace.py
+    routing:
+      "*Put-Call*": one_part      # check first — Put-Call file also contains "GENERAL"
+      "*Upfront-Commission*": one_part   # alias for live-mode filename
+      "*GENERAL*": regional
+      "*Victoria-Stocklist*": regional   # alias for live-mode filename
+
+  hermitage:
+    sender: houseandland@hermitagehomes.com.au
+    ingestion: html_link
+    # Hermitage emails are HubSpot-rendered HTML with two CTA buttons: one for the
+    # weekly master stocklist, one for sub-lists (e.g. Townhouses). We only ingest
+    # the master weekly stocklist in Phase 1.
+    link_strategy:
+      # Primary: derive the PDF URL directly from the email date.
+      # Filename pattern observed 2026-05-08: hubfs/6368574/{DDMMYY}.pdf
+      # The hubfs CDN is public; query params (_hsenc, utm_*, _hsmi) are HubSpot
+      # click telemetry, not auth.
+      url_template: "https://hs-6368574.f.hubspotstarter.net/hubfs/6368574/{ddmmyy}.pdf"
+      date_field: receivedDateTime
+      # Fallback: if the template 404s, parse the email HTML for this button text and
+      # follow the redirect chain:
+      #   HubSpot tracking URL → JS interstitial page (extract second URL with _ud/_jss
+      #   query params) → 307 redirect → final PDF on hubfs CDN.
+      fallback_button_text: "CLICK HERE FOR WEEKLY STOCKLIST"
+    parser: parsers/hermitage.py
+    routing:
+      default: regional
+      # Parser tags rows where Street column == "ONE PART CONTRACT" with one_part;
+      # those bypass regional routing.
+
+  aldrich:
+    sender: Corey.b@aldrichhomes.com.au
+    # Corey sends both the canonical weekly stocklist AND per-package opportunity
+    # emails ("STARLING ESTATE - ...", "LEOPOLD - ESTUARY - ..."). Subject filter
+    # keeps only the canonical stocklist.
+    subject_filter: "stocklist"   # case-insensitive substring
+    ingestion: attachment
+    filename_patterns:
+      - "Stocklist*.pdf"
+    parser: parsers/aldrich.py
+    routing:
+      default: regional
+
+  luxton:
+    sender: stefanc@luxtonhomes.com.au
+    ingestion: html_link             # changed from `attachment` 2026-05-09 — live verification
+    # Stefan's MailChimp newsletters carry "1 Part Sock List - Click" and
+    # "2 Part Stock List - Click" buttons (note the "Sock" typo in source —
+    # we match it as "1 Part Sock List"). Each button is a MailChimp
+    # tracking URL that 302-redirects to a public Google Sheet. We follow
+    # the redirect, extract the sheet ID, and download via /export?format=xlsx.
+    link_strategy:
+      buttons:
+        - text_contains: "1 Part Sock List"
+          filename: "Luxton-One-Part-Stocklist.xlsx"
+          format: google_sheets_xlsx
+        - text_contains: "2 Part Stock List"
+          filename: "Luxton-House-Land-Stocklist.xlsx"
+          format: google_sheets_xlsx
+    filename_patterns:
+      - "Luxton*HOUSE*LAND*STOCKLIST*.xlsx"
+      - "Luxton*House-Land-Stocklist*.xlsx"   # alias for live-mode filename
+      - "Luxton*One Part Contracts*.xlsx"
+      - "Luxton*One-Part-Stocklist*.xlsx"     # alias for live-mode filename
+      - "Luxton*One Part Contracts*.pdf"
+    parser: parsers/luxton.py
+    routing:
+      "*HOUSE*LAND*STOCKLIST*": regional
+      "*House-Land*": regional
+      "*One Part Contracts*": one_part
+      "*One-Part*": one_part
+
+  urbane:
+    sender: tyana.troise@orbithomes.com.au   # primary — confirmed canonical by Tom 2026-05-08
+    secondary_senders:
+      # Same week's stocklist may also arrive via HubSpot. Parser dedupes on the
+      # date in the filename (e.g. "Urbane Homes ... - 8/05/2026 - v001.pdf").
+      - mikayla+2Esalva=orbithomes.com.au@hubspotfree.hs-send.com
+    ingestion: attachment
+    filename_patterns:
+      - "Urbane*Stock*List*.pdf"
+      - "Urbane*Stocklist*.pdf"
+    parser: parsers/urbane.py
+    routing:
+      default: regional
+
+  rea:
+    # Tom's REA Active Listings export. WEEKLY cadence (clarified 2026-06-02):
+    # Tom downloads the CSV from the REA dashboard and emails it to himself
+    # each Monday; the SAME file feeds every report for the rest of the week
+    # (Tue-Sat). Builders change daily; REA changes weekly.
+    #
+    # Lookup: subject-scoped Graph search (from:Tom AND subject:"REA CSV"),
+    # taking the MOST RECENT match regardless of age — so the Monday CSV is
+    # found all week even amid Tom's high daily email volume. The plain
+    # last-20-from-sender window buried it (see graph_read._build_from_search).
+    #
+    # MANDATORY (2026-06-02): if no REA CSV is found at all, the morning
+    # report is HELD, not shipped builder-only (send_report.py main()).
+    #
+    # Listings are NOT builder stock — they feed the Bolst-listings overlay
+    # that folds into the 10 regional sections by suburb
+    # (lib/pdf_render._route_listings).
+    sender: tom@bolstpropertygroup.com.au
+    ingestion: attachment
+    subject_filter: "REA CSV"   # also injected into the Graph $search query
+    filename_patterns:
+      - "REA*.csv"
+    parser: parsers/rea_ignite.py
+    routing:
+      default: regional   # routing is by-suburb at render time, not via suburbs.yml region tags

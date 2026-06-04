@@ -1,0 +1,52 @@
+# delivery.yml
+# ---
+# Where the morning report goes, when, and how it's framed.
+# Tom can edit recipients and times here without touching code.
+
+# NOTE: these recipient/sender lines are a HUMAN-READABLE SUMMARY ONLY.
+# The orchestrator reads the BOLST_REPORT_RECIPIENT / BOLST_REPORT_SENDER /
+# BOLST_ONE_PART_RECIPIENT env vars (Routine secrets) — NOT this file. To
+# change the recipient in production, update the env var, not this line.
+recipient: inam@meetapex.ai      # BUILD PHASE: report goes to Inam for manual review
+                                  # MATURE PHASE: flip to Tom's inbox once reports are validated
+                                  # PHASE 1.5: Tom + Aaron + Howard
+sender:    tom@bolstpropertygroup.com.au   # PRODUCTION: report sent FROM Tom's own Outlook
+                                            # (confirmed 2026-05-07 with Tom — actual address TBD)
+
+# Send mechanism: Microsoft Graph API (msal Python SDK + Mail.Send scope).
+# Tom's Outlook OAuth grant covers Mail.Read + Mail.Send + Mail.ReadWrite.
+# At each phase transition, only the `recipient` line above changes — zero code changes.
+
+# Timezone is hard-coded to Melbourne. Schedules below are local AEST/AEDT
+# (DST handled automatically by the schedule runtime).
+timezone: Australia/Melbourne
+
+# All schedules in HH:MM 24-hr local time. Days follow cron day-of-week
+# (0=Sun, 1=Mon, ..., 6=Sat). See routines/*.yml for the canonical cron
+# expressions; this file is a human-readable summary.
+schedule:
+  # TWO weekday routines (2026-06-02): the 06:30 One Part poll was folded
+  # into the 07:00 report (reads Tom's reply inline) — Routines are
+  # stateless, so the old poll→.cache→report handoff was removed.
+  one_part_evening_prompt: "16:00"   # Mon-Fri (cron: 0 16 * * 1-5) - changed 2026-05-09 per Tom (was 17:00 daily)
+  daily_build_send:        "07:00"   # Tue-Sat (cron: 0 7 * * 2-6) - reads Tom's One Part reply inline at send time
+  # one_part_morning_poll: "06:30"   # REMOVED 2026-06-02 — folded into daily_build_send (see routines/one-part-morning-poll-0630.yml, deprecated)
+  # one_part_cutoff:       "06:45"   # obsolete — no separate poll/cutoff; picks are whatever Tom sent before the 07:00 read
+  approval_check_morning:  "11:00"   # If no "approved" yet, hold (Phase 1.5 only)
+  approval_resend:         "13:00"   # Resend the held report (Phase 1.5 only)
+
+subject_template: "Bolst Stocklist — {date_short}"
+# Available template variables:
+#   {date_short}        e.g. "Tue 6 May"
+#   {date_long}         e.g. "Tuesday 6 May 2026"
+#   {builder_count}     number of builders successfully ingested today
+
+body_template: |
+  Morning — Bolst stocklist report attached.
+
+  Builders ingested today: {builder_count}/6
+  {builder_summary}
+
+  One Part Contracts: {one_part_status}
+
+  Reply "approved" to confirm send to reps (Phase 1.5).

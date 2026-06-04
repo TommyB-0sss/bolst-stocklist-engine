@@ -1,0 +1,25 @@
+# routines/one-part-morning-poll-0630.yml
+# ---
+# ⚠️ DEPRECATED 2026-06-02 — DO NOT CREATE THIS ROUTINE.
+#
+# The standalone 06:30 morning poll was FOLDED INTO the 07:00 morning report.
+# Claude Cloud Routines are stateless (a fresh VM per fire), so the original
+# design — this poll writing picks to .cache/last_morning_picks.json and the
+# 07:00 report reading them back — could never work across two separate VM
+# fires. The report now reads Tom's overnight reply INLINE at send time via
+# lib/one_part_collect.collect_picks (called from
+# skills/compose-and-send/send_report.py).
+#
+# Net effect: there are only TWO weekday routines now —
+#   - bolst-one-part-evening   (Mon-Fri 16:00)  see one-part-evening-1600.yml
+#   - bolst-morning-report     (Tue-Sat 07:00)  see morning-report-0700.yml
+# This drops weekday fires from 3 to 2, comfortably under the Pro 5/day cap.
+#
+# For manual inspection of what the report would collect, run
+# skills/one-part-collect/run.py (debug-only; not scheduled).
+#
+# This file is kept as a record only. The original spec is in git history /
+# BUILD_LOG.md (Stage 9.6). Do not schedule it.
+
+deprecated: true
+superseded_by: morning-report-0700.yml

@@ -1,0 +1,21 @@
+# reps.yml
+# ---
+# Sales reps for Phase 1.5 fan-out.
+#
+# Phase 1 ships ONLY to inam@meetapex.ai (see delivery.yml).
+# Rep fan-out activates in Phase 1.5 once Tom provides each rep's
+# email signature screenshot.
+#
+# Confirmed by Tom 2026-05-06: two reps (not three).
+
+reps:
+
+  - name: Aaron Wilson
+    email: aaron@bolstpropertygroup.com.au
+    phone: "0413 713 082"
+    signature: null         # Phase 1.5 — replace with HTML or image signature
+
+  - name: Howard Rock
+    email: Howard@bolstpropertygroup.com.au
+    phone: "0451 109 778"
+    signature: null
