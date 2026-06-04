@@ -103,10 +103,19 @@ def _build_from_search(sender: str, subject: Optional[str] = None) -> str:
     the case in point — without `subject:`, his ~daily outbound buries the
     Monday CSV well beyond the 20 most-recent by Tuesday.
     """
-    q = f'"from:{sender}"'
+    # Graph $search wants the WHOLE KQL expression inside ONE pair of double
+    # quotes: "from:<sender> AND subject:<subject>". The earlier form used a
+    # separate quote pair per term ('"from:X" AND "subject:Y"'), which Graph
+    # silently degraded to from:<sender> only — so multi-word/low-frequency
+    # subjects (REA's "REA CSV", Aldrich's "stocklist") were never filtered and
+    # the real mail fell past the $top window. Every other quoting variant
+    # (unquoted, per-value quotes, parens) returns HTTP 400. Validated against
+    # Tom's live mailbox 2026-06-04: this form scopes to 5 msgs and finds the
+    # weekly REA CSV; _passes_subject_filter re-checks the substring client-side.
+    inner = f"from:{sender}"
     if subject:
-        q += f' AND "subject:{subject}"'
-    return q
+        inner += f" AND subject:{subject}"
+    return f'"{inner}"'
 
 
 def _list_recent_messages_from(token: str, sender: str, top: int,
