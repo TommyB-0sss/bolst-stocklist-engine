@@ -39,7 +39,7 @@ list. Locally these live in `.env` (gitignored). In the cloud they are
 | `BOLST_AZURE_AUTHORITY` | `https://login.microsoftonline.com/<tenant-id>` |
 | `BOLST_AZURE_SCOPES` | `Mail.Read Mail.Send Mail.ReadWrite` |
 | `BOLST_REPORT_SENDER` | Report sent FROM (Tom's Outlook) |
-| `BOLST_REPORT_RECIPIENT` | Report sent TO. **Source of truth for the recipient — NOT delivery.yml.** Build phase = `inam@meetapex.ai`; flip to Tom at sign-off. |
+| `BOLST_REPORT_RECIPIENT` | Report sent TO — single address or comma-separated list. **Source of truth for the recipient — NOT delivery.yml.** Live = Tom (+ reps Aaron Wilson / Howard Rock once their addresses are confirmed). |
 | `BOLST_ONE_PART_RECIPIENT` | Evening prompt recipient (Tom) |
 | `BOLST_GRAPH_TOKEN_JSON` | **Cloud only.** Full contents of `.credentials/token.json` (the MSAL token cache). `setup.sh` writes it to disk on the VM. See §5. |
 
@@ -194,9 +194,9 @@ the pilot setup. Instead:
 
 ## 8. Phase / recipient transitions
 
-- **Build phase (now):** report → `inam@meetapex.ai` (review). Evening
-  prompt → Tom.
-- **Mature phase:** set `BOLST_REPORT_RECIPIENT` secret to Tom. No code
-  change.
-- **Phase 1.5:** add Aaron Wilson + Howard Rock (reps) — `reps.yml` +
-  per-rep send. Needs rep signatures + Howard's email.
+- **Build phase (done):** report went to `inam@meetapex.ai` for review.
+- **Live (now):** `BOLST_REPORT_RECIPIENT=tom@bolstpropertygroup.com.au`.
+  Evening prompt → Tom.
+- **Reps:** the var takes a comma-separated list — append Aaron Wilson +
+  Howard Rock once their addresses are confirmed. Update the secret in the
+  cloud environment; no code change.
