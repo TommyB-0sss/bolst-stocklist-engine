@@ -27,12 +27,16 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
-if [ -n "${BOLST_GRAPH_TOKEN_JSON:-}" ]; then
+if [ -n "${BOLST_GRAPH_TOKEN_JSON_B64:-}" ]; then
+  mkdir -p .credentials
+  printf '%s' "$BOLST_GRAPH_TOKEN_JSON_B64" | base64 -d > .credentials/token.json
+  echo "[setup] wrote .credentials/token.json from BOLST_GRAPH_TOKEN_JSON_B64"
+elif [ -n "${BOLST_GRAPH_TOKEN_JSON:-}" ]; then
   mkdir -p .credentials
   printf '%s' "$BOLST_GRAPH_TOKEN_JSON" > .credentials/token.json
   echo "[setup] wrote .credentials/token.json from BOLST_GRAPH_TOKEN_JSON"
 else
-  echo "[setup] WARNING: BOLST_GRAPH_TOKEN_JSON not set — Graph auth will" \
+  echo "[setup] WARNING: BOLST_GRAPH_TOKEN_JSON(_B64) not set — Graph auth will" \
        "fail in headless mode (device-code flow cannot run without a browser)."
 fi
 

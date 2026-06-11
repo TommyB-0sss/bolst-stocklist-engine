@@ -1,7 +1,7 @@
 # Secrets and runtime credentials
 .env
 .credentials/
-
+env-file.md
 # Python
 .venv/
 __pycache__/
@@ -13,3 +13,4 @@ output/
 
 # Cached mailbox downloads (live builder PDFs/XLSX from Tom's Outlook)
 .cache/
+env-file.md
