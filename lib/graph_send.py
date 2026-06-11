@@ -56,6 +56,9 @@ def send_mail(
     """
     Send an email via Microsoft Graph as the authenticated user.
 
+    `recipient` is a single address or a comma-separated list
+    ("tom@x.com, aaron@x.com") — all go in the To: line.
+
     Pass either body_text (plain) or body_html (HTML). HTML wins if both supplied.
 
     Raises HTTPError on non-2xx responses. The expected success status is 202 Accepted —
@@ -63,6 +66,9 @@ def send_mail(
     """
     if body_html is None and body_text is None:
         raise ValueError("send_mail requires body_text or body_html")
+    to_addresses = [a.strip() for a in recipient.split(",") if a.strip()]
+    if not to_addresses:
+        raise ValueError("send_mail requires at least one recipient address")
     if body_html is not None:
         body_payload = {"contentType": "HTML", "content": body_html}
     else:
@@ -73,7 +79,7 @@ def send_mail(
         "message": {
             "subject": subject,
             "body": body_payload,
-            "toRecipients": [{"emailAddress": {"address": recipient}}],
+            "toRecipients": [{"emailAddress": {"address": a}} for a in to_addresses],
             "attachments": [a.as_graph_payload() for a in attachments],
         },
         "saveToSentItems": save_to_sent_items,
