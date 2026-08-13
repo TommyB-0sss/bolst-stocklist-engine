@@ -1,8 +1,8 @@
 """
 Stage 9.8.7b — Morning report orchestrator (07:00 AEST Tue-Sat).
 
-Live end-to-end production pipeline. Reads all 6 builders' stocklists
-from Tom's Outlook, applies any One Part picks Tom replied with overnight,
+Live end-to-end production pipeline. Reads every builder in the PARSERS
+roster from Tom's Outlook, applies any One Part picks Tom replied with overnight,
 routes + filters + renders the branded PDF, and sends it via Microsoft
 Graph from Tom's Outlook to the configured recipient.
 
@@ -15,9 +15,9 @@ Resilience
 ----------
 If any single builder fails to ingest (transient HTTP, format change),
 the orchestrator logs and skips that builder rather than aborting the
-whole report. The morning report ships with the available 5/6 (or
-4/6) builders' data and a footer note. Catastrophic failures
-(authentication, render) abort.
+whole report. The morning report ships with whatever builders did come
+through, and the confirmation email states the tally (see
+_builder_tally). Catastrophic failures (authentication, render) abort.
 """
 
 from __future__ import annotations
@@ -39,13 +39,8 @@ from lib.graph_read import (  # noqa: E402
     IngestError, fetch_all_for_builder, load_builders_config,
 )
 from lib.graph_send import Attachment, send_mail                         # noqa: E402
-from lib.parsers.aldrich import parse as parse_aldrich                   # noqa: E402
-from lib.parsers.aplace import parse as parse_aplace                     # noqa: E402
-from lib.parsers.hermitage import parse as parse_hermitage               # noqa: E402
-from lib.parsers.luxton import parse as parse_luxton                     # noqa: E402
+from lib.builder_roster import PARSERS                                   # noqa: E402
 from lib.parsers.rea_ignite import parse as parse_rea                    # noqa: E402
-from lib.parsers.specialised import parse as parse_specialised           # noqa: E402
-from lib.parsers.urbane import parse as parse_urbane                     # noqa: E402
 from lib.parsers.types import ListingRow, StocklistRow                   # noqa: E402
 from lib.one_part_collect import collect_picks                          # noqa: E402
 from lib.pdf_render import build_report_pdf                              # noqa: E402
@@ -56,14 +51,24 @@ from lib.status_filter import load_drop_list, should_keep                # noqa:
 load_dotenv(BUNDLE_ROOT / ".env")
 MELBOURNE = ZoneInfo("Australia/Melbourne")
 
-PARSERS = {
-    "specialised": parse_specialised,
-    "aldrich":     parse_aldrich,
-    "urbane":      parse_urbane,
-    "hermitage":   parse_hermitage,
-    "aplace":      parse_aplace,
-    "luxton":      parse_luxton,
-}
+# The builder roster now lives in lib/builder_roster.py so this file, the
+# suburb audit and the local renderer cannot drift apart. len(PARSERS) remains
+# the single source of truth for how many builders the report covers — never
+# hard-code the count, or adding a builder silently produces nonsense like
+# "8/6 builders" in the confirmation email.
+
+
+def _builder_tally(failed_builders: list[str]) -> tuple[int, int]:
+    """Return (ingested_ok, total_builders).
+
+    `failed_builders` holds either a bare builder id (fetch failed) or
+    "<builder_id>:<filename>" (that file failed to parse). A builder is
+    counted as failed if it appears in either form, so the base id is what
+    gets de-duplicated.
+    """
+    total = len(PARSERS)
+    distinct_failed = {b.split(":")[0] for b in failed_builders}
+    return total - len(distinct_failed), total
 
 
 def _arg(argv: list[str], flag: str, default: str | None = None) -> str | None:
@@ -89,7 +94,7 @@ def _build_notice(pick_count: int, unresolved: list[str]) -> str | None:
 
 
 def _ingest_all_builders() -> tuple[list[StocklistRow], list[str]]:
-    """Fetch + parse all 6 builders. Returns (rows, failed_builder_ids).
+    """Fetch + parse every builder in PARSERS. Returns (rows, failed_builder_ids).
 
     Per-builder try/except so one builder's transient failure doesn't
     abort the morning report. The morning email mentions which builders
@@ -146,7 +151,7 @@ def _log_rea_freshness(path: Path) -> None:
 def _ingest_rea_listings() -> tuple[list[ListingRow], Optional[str]]:
     """Fetch + parse Tom's daily 'REA CSV' email. Returns (listings, error).
 
-    The REA feed is independent of the 6 builder pipelines: it produces
+    The REA feed is independent of the builder pipelines: it produces
     ListingRows (not StocklistRows), bypasses the status filter, and
     folds into regions at render time via lib/pdf_render._route_listings.
 
@@ -201,11 +206,12 @@ def main(argv: list[str]) -> int:
     print(f"Sender:      {os.environ['BOLST_REPORT_SENDER']}")
     print(f"No-send:     {no_send}\n")
 
-    # 1. Ingest all 6 builders live
-    print("Ingesting all 6 builders live from Outlook...")
+    # 1. Ingest every builder in the PARSERS roster
+    print(f"Ingesting all {len(PARSERS)} builders live from Outlook...")
     all_rows, failed_builders = _ingest_all_builders()
+    ok_builders, total_builders = _builder_tally(failed_builders)
     print(f"\nIngested: {len(all_rows)} total rows from "
-          f"{6 - len(set(b.split(':')[0] for b in failed_builders))} of 6 builders")
+          f"{ok_builders} of {total_builders} builders")
     if failed_builders:
         print(f"  FAILED:  {failed_builders}")
 
@@ -285,7 +291,7 @@ def main(argv: list[str]) -> int:
     body_text = (
         f"Morning - Bolst stocklist report attached.\n\n"
         f"Report date: {_format_long_date(report_date)}\n"
-        f"Builders ingested today: {6 - len(set(b.split(':')[0] for b in failed_builders))}/6\n"
+        f"Builders ingested today: {ok_builders}/{total_builders}\n"
         f"Total builder rows (post status filter): {len(kept)}\n"
         f"Bolst REA listings folded in: {len(listings)}\n"
         f"One Part rows: {len(one_part_rows)} "

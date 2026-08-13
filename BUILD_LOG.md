@@ -1593,3 +1593,100 @@ Researched current Claude Code routines docs before the Tom handover session.
     a throwaway private repo BEFORE the Tom session** to prove clone + secrets
     + pip/python on a fired routine. RUNBOOK §4 + §4a rewritten with the
     confirmed mechanism + this pre-flight.
+
+## 2026-08-06 — Graph token renewed; Goldstate + Monaco live; uncategorised driven to 0
+
+Session picked up from the 2026-08-05 pause. The one blocker was Tom's Microsoft
+sign-in; everything else followed from unblocking it.
+
+**Token renewal (RESOLVED).** Both routines had been failing since Tue 4 Aug —
+Tom's 3 Aug M365 password change revoked the frozen refresh token (AADSTS50173,
+`TokensValidFrom 2026-08-03T08:22:55Z`). Renewed live on a call: `python -m
+lib.auth` device flow as Tom, then the base64 cache pasted into
+`BOLST_GRAPH_TOKEN_JSON_B64` in the `bolst` environment on Tom's claude.ai.
+Local silent refresh confirmed working afterwards.
+  - **Ordering lesson:** capture the `.b64` **AFTER** the `--no-send` verify, not
+    before. MSAL rotates the refresh token on every successful run and rewrites
+    `token.json`, so capturing last ships the newest token, already proven.
+  - **Trap:** `env-file.md` (bundle root, gitignored, never committed) holds a
+    full b64 token and is the paste-source for the env block. It must be updated
+    at renewal or a later paste silently redeploys the DEAD token.
+  - `Mail.Send` is still UNVERIFIED — every run this session used `--no-send`.
+
+**Goldstate + Monaco wired for live ingest.** builders.yml entries written
+against the REAL emails (the 2026-08-05 samples were Gmail screenshots with no
+recoverable hrefs). Both use the existing `buttons` / `text_contains` strategy,
+so NO new ingest code was needed.
+  - **Goldstate** `sales@goldstate.com.au`, link text `GoldstateHomesStockList.pdf`,
+    href = MailerLite click-tracker → storage.googleapis.com PDF.
+    `subject_filter: "Stock List"` is **load-bearing**: that sender also blasts
+    campaign mail with no stocklist link, which would be picked as `latest` and
+    fail. BDMs deliberately NOT added as secondary_senders — `dbowen@` sends only
+    personal correspondence, `dprendergast@` sends nothing.
+  - **Monaco** `jacob.l@monacobuilt.com`, button `WEEKLY STOCKLIST LINK` (of 4).
+    href is wrapped in `urldefense.proofpoint.com` by Bolst's OWN inbound mail
+    security; verified requests follows it straight through to the MailChimp PDF,
+    so no decoder needed. Decode recipe left in a builders.yml comment.
+
+**Live 8-builder run:** 759 rows from 8/8 → 730 kept + 131 REA, 41 pages,
+cover total reconciles. goldstate 62, monaco 213 unique (dedupe working — a
+failure would have shown ~639).
+
+**Uncategorised 9 → 13 → 0.** Three distinct causes, three distinct fixes:
+  - config (`suburbs.yml`): `Officer South` + `Beaconsfield` → metro-south-east;
+    new `Wangandary` → regional-north-east; aliases `Mickelham`→Mickleham and
+    `Wagandary`→Wangandary.
+  - code (`routing.py`): new `_STATE_COUNTRY_TAIL` strips a trailing
+    state/country BEFORE the comma rule. Hermitage sends
+    `Winter Valley VIC, Australia` and `rsplit(",")[-1]` was reducing it to
+    `AUSTRALIA`. An alias could NOT fix this — an `AUSTRALIA` key would swallow
+    every future such suburb. Rule list in suburbs.yml renumbered to 6 steps.
+  - parser (`specialised.py`): new `_split_on_suburb_anchor`. The old code took
+    the estate token count from the SECTION HEADER and applied it to every row,
+    so a row whose own estate had a different word count shifted every field
+    (`35 Quartz Street Wagandary One Mile Creek` under a `WAGANDARY - GRANITE
+    PARK` header → suburb `One`, estate `Mile Creek`, street absorbed the
+    suburb). Anchoring on the suburb makes estate word count irrelevant.
+    **Subtlety:** some estates repeat the suburb (`Kilmore Kilmore Grounds`), so
+    the anchor prefers the position whose trailing tokens exactly equal the
+    section estate before falling back to position. Word-count path KEPT as
+    fallback so nothing that parsed before stops parsing.
+
+**Silent partial ingest — surfaced (`graph_read.py`).** `_fetch_html_link_mode`
+raised only if NO buttons resolved; partial success returned silently and the
+`missing` list was discarded. So the report had been quietly missing **Aplace's
+"100% Upfront commission"** and **Luxton's "2 Part Stock List"** (~37 packages).
+Now warns on stderr naming the missing lists and the source email date. Cause is
+NOT ours: both senders' latest emails genuinely omit those buttons (Luxton's
+6 Jul send was a 1-Part-only campaign, and he has sent nothing since).
+NOTE: the warning lands in routine LOGS, not the report email — threading it
+into the footer needs a `fetch_all_for_builder` signature change, deliberately
+not bundled here.
+
+**Roster centralised — new `lib/builder_roster.py`.** The PARSERS dict had been
+hand-copied into three files; the audit script had drifted to 6 builders and
+reported "all suburbs map cleanly" for builders it never loaded, and
+`render_local.py` was also still on 6. All three now import the shared roster
+(verified they reference the SAME object). Adding a builder = parser file +
+builders.yml entry + one line in builder_roster.py.
+
+**Verification.** Regression suite unchanged at **15 pass / 4 fail** before and
+after. The 4 fails: `validate_hermitage` + `validate_luxton` (pre-existing, see
+2026-08-05 notes) and `validate_graph_read_aplace` + `..._luxton`, which assert
+2 files each and are red because of the missing-button issue above — all four
+were already red before this session's changes. The Specialised change was
+additionally proven by forcing the anchor to return None (which reproduces the
+old path exactly) and diffing field-by-field over all 5 cached stocklists,
+261 rows: **1 row changed, 0 rows lost.** Normalisation change covered by 27
+assertions including every pre-existing case.
+
+**NOT DONE / next session:**
+  1. **COMMIT + PUSH — deferred by Inam until Tom replies.** Until then the cloud
+     routine runs the 11 Jun commit and the 07:00 fire keeps sending the OLD
+     6-builder report. 13 changed/new files in the tree.
+  2. South Australia region — needs an 11th hand-calibrated
+     `COVER_REGION_COUNTS` y-coordinate, not just a `regions:` entry, and Tom's
+     REA export has ZERO SA stock today.
+  3. Verify `Mail.Send` on the new token.
+  4. Ask Tom: the week-old REA CSV (30 Jul), and whether Aplace/Luxton stopped
+     sending those second stocklists on purpose.

@@ -2,7 +2,8 @@
 Local PDF renderer — Bolst stocklist + Bolst Listings, no Graph send.
 
 Mirrors skills/compose-and-send/send_report.py but:
-  - Pulls 6 builders from Tom's Outlook (same fetch path as production)
+  - Pulls every builder in lib/builder_roster.py from Tom's Outlook (same fetch
+    path as production)
   - Parses a LOCAL REA Ignite CSV (Tom hasn't wired the scheduled email yet)
   - Writes PDF to bundle output/ folder — no Microsoft Graph send
 
@@ -30,13 +31,8 @@ sys.path.insert(0, str(BUNDLE_ROOT))
 from lib.graph_read import (  # noqa: E402
     IngestError, fetch_all_for_builder, load_builders_config,
 )
-from lib.parsers.aldrich import parse as parse_aldrich                   # noqa: E402
-from lib.parsers.aplace import parse as parse_aplace                     # noqa: E402
-from lib.parsers.hermitage import parse as parse_hermitage               # noqa: E402
-from lib.parsers.luxton import parse as parse_luxton                     # noqa: E402
+from lib.builder_roster import PARSERS                                   # noqa: E402
 from lib.parsers.rea_ignite import parse as parse_rea                    # noqa: E402
-from lib.parsers.specialised import parse as parse_specialised           # noqa: E402
-from lib.parsers.urbane import parse as parse_urbane                     # noqa: E402
 from lib.parsers.types import StocklistRow                               # noqa: E402
 from lib.pdf_render import build_report_pdf                              # noqa: E402
 from lib.pick_apply import apply_picks                                   # noqa: E402
@@ -53,14 +49,9 @@ DEFAULT_REA_CSV = (
     / "HomeLandPkg_Active_All_Agents_20260501.csv"
 )
 
-PARSERS = {
-    "specialised": parse_specialised,
-    "aldrich":     parse_aldrich,
-    "urbane":      parse_urbane,
-    "hermitage":   parse_hermitage,
-    "aplace":      parse_aplace,
-    "luxton":      parse_luxton,
-}
+# PARSERS comes from lib/builder_roster.py — this script kept its own copy and
+# was still on 6 builders after Goldstate and Monaco went live, so it rendered a
+# clean-looking PDF that silently omitted both.
 
 
 def _arg(argv: list[str], flag: str, default: str | None = None) -> str | None:

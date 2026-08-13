@@ -136,6 +136,59 @@ builders:
     routing:
       default: regional
 
+  goldstate:
+    # Added 2026-08-06 (Tom's paid 2026-08 scope request).
+    sender: sales@goldstate.com.au
+    ingestion: html_link
+    # subject_filter is LOAD-BEARING here, not defensive. Verified against the
+    # live mailbox 2026-08-06: sales@ also sends campaign mail with no stocklist
+    # link at all (2026-07-20 "SMSF 1-Part Contracts | EOIs Close 27 July ...").
+    # Both genuine stocklist subjects carry "Stock List"; that promo does not:
+    #   2026-07-29  "Goldstate Homes Stock List | Turnkey H&L $595k"
+    #   2026-07-22  "Goldstate Homes Stock List | Last Chance for SMSF 1-Part ..."
+    # Without the filter, a promo arriving last would be picked as `latest` and
+    # ingest would fail with "no buttons resolved".
+    subject_filter: "Stock List"   # case-insensitive substring
+    # BDMs dbowen@ / dprendergast@goldstate.com.au were candidates for
+    # secondary_senders, but the live mailbox shows dbowen sends only personal
+    # correspondence ("RE: One-Part Contract update request") and dprendergast
+    # sends nothing. Deliberately NOT added — they would only add noise.
+    link_strategy:
+      # Body hyperlink text is the literal filename. The href is a MailerLite
+      # click-tracker (qoobjyy.clicks.mlsend.com) that 30x-redirects to the PDF
+      # on storage.googleapis.com. requests follows it; no decoding needed.
+      buttons:
+        - text_contains: "GoldstateHomesStockList.pdf"
+          filename: "Goldstate-Stocklist.pdf"
+    parser: parsers/goldstate.py
+    routing:
+      # Page 3 of the source is an SMSF 1-Part explainer in prose, not row
+      # flags, so every row routes regionally.
+      default: regional
+
+  monaco:
+    # Added 2026-08-06 (Tom's paid 2026-08 scope request).
+    sender: jacob.l@monacobuilt.com
+    ingestion: html_link
+    subject_filter: "StockList Update"   # "MonacoBuilt StockList Update - <D Mon YYYY> - ..."
+    link_strategy:
+      # The email carries four buttons (WEEKLY STOCKLIST LINK, PRODUCT GUIDE,
+      # CAPABILITY STATEMENT, EOI FORM) — only the first is the stocklist.
+      #
+      # GOTCHA: the href is wrapped by Bolst's OWN inbound mail security
+      # (urldefense.proofpoint.com) around a MailChimp mcusercontent.com file
+      # URL. Verified 2026-08-06 that requests follows the Proofpoint wrapper
+      # straight through to the PDF, so NO urldefense decoder is needed. If
+      # Proofpoint ever starts serving an interstitial to non-browser clients,
+      # decode the `u=` param instead: '_' -> '/', then '-XX' -> '%XX', unquote.
+      buttons:
+        - text_contains: "WEEKLY STOCKLIST LINK"
+          filename: "Monaco-Weekly-Stocklist.pdf"
+    parser: parsers/monaco.py
+    routing:
+      # No STATUS column in the source; parser stamps rows "Available".
+      default: regional
+
   rea:
     # Tom's REA Active Listings export. WEEKLY cadence (clarified 2026-06-02):
     # Tom downloads the CSV from the REA dashboard and emails it to himself

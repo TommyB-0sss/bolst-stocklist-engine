@@ -20,6 +20,7 @@ file-output use cases (hello.py CLI) and in-memory use cases (Graph attachment).
 from __future__ import annotations
 
 import re
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -879,13 +880,62 @@ def _render_cover_onto(pdf: FPDF,
     per_region: dict[str, int] = defaultdict(int)
     for rr in routed_rows:
         per_region[rr.region_id] += 1
+    extra_counts: dict[str, int] = {}
     if listings:
         listing_buckets = _route_listings(listings, config)
         for region_id, ls in listing_buckets.items():
             if region_id.startswith(BOLST_EXTRA_PREFIX):
-                continue   # bolst-extra sections sit outside the 10 cover regions
+                # bolst-extra sections sit outside the 10 cover regions: they
+                # render as their own per-suburb sections but the branded
+                # artwork has no line for them, so they cannot be counted here
+                # without breaking headline == sum(region lines).
+                extra_counts[region_id[len(BOLST_EXTRA_PREFIX):]] = len(ls)
+                continue
             per_region[region_id] += len(ls)
-    total = sum(per_region.values())
+
+    # The headline TOTAL PACKAGES must equal the sum of the per-region counts
+    # printed directly beneath it. Summing per_region wholesale breaks that
+    # promise the moment a row routes somewhere the cover has no line for —
+    # in practice 'uncategorised', which happens whenever a builder ships a
+    # suburb missing from config/suburbs.yml. Such a row is counted here but
+    # renders on no page at all (the body loop iterates config.region_names,
+    # which excludes it), so the headline silently overstates. That regressed
+    # on 2026-06-16 and was patched by mapping the suburbs of the day rather
+    # than by removing the mechanism, so it re-arms with every new builder.
+    #
+    # Summing over the cover's OWN region list makes headline and region
+    # lines reconcile by construction, and anything excluded gets shouted
+    # about instead of absorbed.
+    cover_region_ids = [rid for rid, _y in COVER_REGION_COUNTS]
+    total = sum(per_region.get(rid, 0) for rid in cover_region_ids)
+
+    unrendered = {rid: n for rid, n in sorted(per_region.items())
+                  if n and rid not in cover_region_ids
+                  and not rid.startswith(BOLST_EXTRA_PREFIX)}
+    if unrendered:
+        print(
+            f"WARNING: {sum(unrendered.values())} row(s) routed outside the "
+            f"cover's regions and will not appear on any page: {unrendered}. "
+            f"Excluded from the TOTAL PACKAGES headline. Fix by mapping the "
+            f"suburb in config/suburbs.yml, or by adding the region to both "
+            f"the regions: list and COVER_REGION_COUNTS.",
+            file=sys.stderr,
+        )
+
+    # The mirror-image problem: bolst-extra rows DO render, but have no cover
+    # line, so the headline understates the document by exactly their count.
+    # The fallback is meant to be empty (it was on 2026-05-25 when it was
+    # built); a non-empty one means an REA suburb needs mapping. Warn rather
+    # than fold them into the total, because folding would leave the headline
+    # disagreeing with the sum of the region lines printed under it.
+    if extra_counts:
+        print(
+            f"WARNING: {sum(extra_counts.values())} REA listing(s) rendered in "
+            f"bolst-extra fallback sections: {extra_counts}. These have no "
+            f"cover line, so TOTAL PACKAGES understates the document by that "
+            f"many. Fix by mapping the suburb(s) in config/suburbs.yml.",
+            file=sys.stderr,
+        )
 
     # Mask + overlay date.
     _mask_and_write(pdf, **_scaled(COVER_FIELDS["date"]),

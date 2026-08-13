@@ -18,9 +18,13 @@ all rows, so we walk lines and match patterns:
   - Data line: "<lot> <address...> <suburb...> <estate...> <titles> <area>m2
                 <floorplan> <bed - bath - car> $<price>"
 
-Address/suburb/estate are space-separated and any can be multi-word — the
-section header tells us how many words for suburb and estate, which lets us
-slice the row's middle deterministically.
+Address/suburb/estate are space-separated and any can be multi-word. We slice
+the row's middle by LOCATING the section's suburb inside the line
+(_split_on_suburb_anchor), which leaves the estate as whatever follows it.
+Counting words from the section header (_split_lot_address_suburb_estate) is
+only the fallback now: it silently misaligns any row whose own estate has a
+different word count than its section header's — see the 2026-08-06 note on
+_split_on_suburb_anchor.
 
 Source PDF lacks a STATUS column — Specialised only publishes available stock.
 Parser defaults status="Available". Revisit if Specialised ever starts including
@@ -117,6 +121,81 @@ def _split_lot_address_suburb_estate(
     )
 
 
+def _match_at(tokens: list[str], start: int, needle: list[str]) -> bool:
+    """Case-insensitive token-sequence match of `needle` at `tokens[start:]`.
+
+    Case-insensitive because section headers are upper case ("WAGANDARY",
+    "McMAHONS PLACE") while the data rows are title case ("Wagandary").
+    """
+    if not needle or start + len(needle) > len(tokens):
+        return False
+    return all(
+        tokens[start + i].lower() == needle[i].lower() for i in range(len(needle))
+    )
+
+
+def _split_on_suburb_anchor(
+    head: str, section_suburb: str, section_estate: str
+) -> Optional[tuple[str, str, str, str]]:
+    """Slice a data line by LOCATING the section's suburb inside it.
+
+    Preferred over _split_lot_address_suburb_estate because it makes the row's
+    estate token count irrelevant. The word-count approach assumes every row in
+    a section shares the section header's estate; when a row's own estate has a
+    different number of words, every field shifts by the difference. Real defect
+    found 2026-08-06:
+
+        section header:  WAGANDARY - GRANITE PARK          (estate = 2 words)
+        data row:        35 Quartz Street Wagandary One Mile Creek Titled ...
+
+    "One Mile Creek" is 3 words, so slicing by 2 gave estate="Mile Creek",
+    suburb="One" and street="Quartz Street Wagandary".
+
+    Returns None if the suburb does not appear in the line, so the caller can
+    fall back to the original word-count slicing rather than drop the row.
+    """
+    tokens = head.split()
+    suburb_tokens = section_suburb.split()
+    estate_tokens = section_estate.split()
+    if not suburb_tokens:
+        return None
+
+    # Candidate positions leave at least one address token before the suburb
+    # and at least one estate token after it.
+    candidates = [
+        i
+        for i in range(2, len(tokens) - len(suburb_tokens))
+        if _match_at(tokens, i, suburb_tokens)
+    ]
+    if not candidates:
+        return None
+
+    # Prefer the position whose trailing tokens are EXACTLY the section estate.
+    # This disambiguates estates that repeat the suburb name — e.g.
+    # "2 Jessica Avenue Kilmore Kilmore Grounds", where the last occurrence of
+    # "Kilmore" is the estate's first word, not the suburb.
+    chosen = next(
+        (
+            i
+            for i in candidates
+            if _match_at(tokens, i + len(suburb_tokens), estate_tokens)
+            and i + len(suburb_tokens) + len(estate_tokens) == len(tokens)
+        ),
+        candidates[-1],
+    )
+
+    address_tokens = tokens[1:chosen]
+    estate_out = tokens[chosen + len(suburb_tokens):]
+    if not address_tokens or not estate_out:
+        return None
+    return (
+        tokens[0],
+        " ".join(address_tokens),
+        " ".join(tokens[chosen:chosen + len(suburb_tokens)]),
+        " ".join(estate_out),
+    )
+
+
 def _clean_money(value) -> Optional[int]:
     s = _clean_str(value)
     if not s:
@@ -164,11 +243,16 @@ def parse(file_path: Path) -> list[StocklistRow]:
                 car = int(tail_match.group(7))
                 price = _clean_money(tail_match.group(8))
 
-                split = _split_lot_address_suburb_estate(
-                    head,
-                    suburb_word_count=len(section_suburb.split()),
-                    estate_word_count=len(section_estate.split()),
-                )
+                # Suburb-anchored slicing first; word-count slicing is the
+                # fallback for rows where the section suburb does not appear
+                # verbatim, so no row that parsed before stops parsing now.
+                split = _split_on_suburb_anchor(head, section_suburb, section_estate)
+                if split is None:
+                    split = _split_lot_address_suburb_estate(
+                        head,
+                        suburb_word_count=len(section_suburb.split()),
+                        estate_word_count=len(section_estate.split()),
+                    )
                 if split is None:
                     continue
                 lot, street, suburb, estate = split

@@ -64,11 +64,14 @@ region_banner:
 # Pre-normalisation rules applied by lib/routing.py BEFORE alias lookup,
 # in this order:
 #   1. Strip trailing parens block:  "Bonshaw (Ballarat)" → "Bonshaw"
-#   2. If contains comma, take last part:
+#   2. Strip trailing state/country tail (added 2026-08-06):
+#        "Winter Valley VIC, Australia" → "Winter Valley"
+#      Must precede rule 3, which would otherwise leave "Australia".
+#   3. If contains comma, take last part:
 #        "Penndale Street, Tarneit" → "Tarneit"
-#   3. Trim whitespace, uppercase
-#   4. Apply suburb_aliases below
-#   5. Look up in suburb_to_region (case-insensitive, uppercased keys)
+#   4. Trim whitespace, uppercase
+#   5. Apply suburb_aliases below
+#   6. Look up in suburb_to_region (case-insensitive, uppercased keys)
 #
 # These rules are documented here, not in suburbs.yml itself, because
 # they're code-level. Updating them is a code change, not a config change.
@@ -78,6 +81,10 @@ region_banner:
 suburb_aliases:
   "Frasers Rise": "Fraser Rise"   # Luxton possessive form
   "Mt Duneed":    "Mount Duneed"  # Aplace abbreviation
+  "Wrragul":      "Warragul"      # added 2026-06-16 — Aplace misspelling of Warragul
+  "Mickelham":    "Mickleham"     # added 2026-08-06 — Aplace misspelling (missing the 'l')
+  "Wagandary":    "Wangandary"    # added 2026-08-06 — Specialised's spelling, in both its section
+                                  # headers and its data rows; the locality is Wangandary
   # Also handled by pre-normalisation rules (no alias needed):
   #   "Penndale Street, Tarneit" → comma split → "Tarneit"
   #   "Tarnala Road, Tarneit"    → comma split → "Tarneit"
@@ -103,9 +110,10 @@ suburb_to_region:
   "Ocean Grove":      geelong-colac   # added 2026-05-25 (REA) — Bellarine
   "Winchelsea":       geelong-colac   # borderline-ruled (adjacent to Colac)
 
-  # Gippsland (17)
+  # Gippsland (19)
   "Bunyip":           gippsland       # added 2026-05-25 (REA) — borderline; east of Pakenham, matches Drouin's eastward grouping
   "Drouin":           gippsland
+  "Drouin West":      gippsland       # added 2026-08-05 (Goldstate) — adjoining locality ~3km from Drouin, same Baw Baw Shire
   "East Bairnsdale":  gippsland       # added 2026-05-25 (REA)
   "Glengarry":        gippsland       # added 2026-05-25 (REA) — Latrobe Valley
   "Grantville":       gippsland
@@ -117,35 +125,53 @@ suburb_to_region:
   "Sale":             gippsland       # added 2026-05-25 (REA) — Wellington Shire
   "San Remo":         gippsland       # added 2026-05-25 (REA) — Bass Coast / Phillip Island
   "Stratford":        gippsland       # added 2026-05-25 (REA) — Wellington Shire
+  "Trafalgar":        gippsland       # added 2026-08-05 (REA) — Baw Baw Shire, between Moe and Warragul
   "Traralgon":        gippsland
   "Warragul":         gippsland
   "Wonthaggi":        gippsland       # added 2026-05-25 (REA) — Bass Coast
   "Yinnar":           gippsland       # added 2026-05-25 (REA) — Latrobe Valley
 
-  # Metro North (12)
+  # Horsham (2)
+  "Horsham":          horsham             # added 2026-06-16 (REA) — region name was missing its self-mapping
+  "Stawell":          horsham             # added 2026-08-05 (REA) — borderline; Northern Grampians, ~60km E of
+                                          # Horsham vs ~100km NW of Ballarat, so Horsham is the nearer of the two
+                                          # candidate regions (regional-west being the other)
+
+  # Metro North (15)
   "Beveridge":        metro-north
+  "Bulla":            metro-north         # added 2026-06-16 (Aldrich) — Sunbury/Tullamarine corridor
   "Craigieburn":      metro-north
   "Donnybrook":       metro-north
   "Epping":           metro-north
   "Kalkallo":         metro-north
   "Kilmore":          metro-north     # added 2026-05-25 (REA + Specialised) — borderline; same commuter-belt ruling as Wallan
+  "Mernda":           metro-north     # added 2026-08-05 (Monaco) — City of Whittlesea, adjoins Doreen / South Morang
   "Mickleham":        metro-north
+  "Romsey":           metro-north     # added 2026-08-05 (REA) — borderline; Macedon Ranges, same commuter-belt
+                                      # ruling as Kilmore and Wallan
   "Sunbury":          metro-north
   "Thomastown":       metro-north
   "Wallan":           metro-north     # borderline-ruled (commuter-belt)
   "Wollert":          metro-north
   "Woodstock":        metro-north     # borderline-ruled (Aldrich tags as North)
 
-  # Metro South East (6)
+  # Metro South East (10)
+  "Beaconsfield":     metro-south-east  # added 2026-08-06 (Aldrich) — Cardinia Shire, Pakenham line, adjoins Berwick/Officer
+  "Berwick":          metro-south-east  # added 2026-08-05 (Monaco) — City of Casey, adjoins Clyde North
   "Clyde":            metro-south-east  # added 2026-05-25 (Specialised) — adjacent to Clyde North
+  "Rowville":         metro-south-east  # added 2026-06-16 (Hermitage) — SE metro, near Ferntree Gully
   "Clyde North":      metro-south-east
   "Cranbourne East":  metro-south-east
   "Nar Nar Goon":     metro-south-east  # borderline-ruled (Pakenham corridor)
   "Officer":          metro-south-east
+  "Officer South":    metro-south-east  # added 2026-08-06 (Monaco) — Cardinia Shire, adjoins Officer; distinct locality, so
+                                        # the bare "Officer" mapping does not cover it
   "Pakenham":         metro-south-east  # added 2026-05-25 (REA)
 
-  # Metro West (16)
+  # Metro West (18)
+  "Bonnie Brook":     metro-west         # added 2026-08-05 (Monaco) — City of Melton, Rockbank/Fraser Rise corridor
   "Cobblebank":       metro-west
+  "Plumpton":         metro-west         # added 2026-06-16 (Hermitage) — Rockbank/Fraser Rise corridor
   "Deanside":         metro-west
   "Diggers Rest":     metro-west       # added 2026-05-25 (Aldrich) — Melton/Sunbury corridor
   "Fraser Rise":      metro-west
@@ -162,8 +188,9 @@ suburb_to_region:
   "Werribee":         metro-west
   "Wyndham Vale":     metro-west
 
-  # Regional North East (14)
+  # Regional North East (16)
   "Benalla":          regional-north-east
+  "Mansfield":        regional-north-east  # added 2026-06-16 (Specialised) — high country, NE Victoria
   "Cobram":           regional-north-east  # added 2026-05-25 (Specialised) — Murray river, near Yarrawonga
   "Echuca":           regional-north-east  # added 2026-05-08 — Goulburn-Murray corridor with Shepparton/Mooroopna; Specialised's other regional listings all fall here
   "Kialla":           regional-north-east  # added 2026-05-25 (REA) — outskirts of Shepparton
@@ -175,11 +202,14 @@ suburb_to_region:
   "Shepparton North": regional-north-east
   "Swan Hill":        regional-north-east  # added 2026-05-25 (Specialised) — Murray-corridor extension (Inam call); Mallee region not currently in Bolst's 10
   "Tatura":           regional-north-east  # added 2026-05-25 (REA + Aplace) — Goulburn Valley
+  "Wangandary":       regional-north-east  # added 2026-08-06 (Specialised) — rural locality immediately S of Wangaratta;
+                                           # reached via the "Wagandary" alias, which is how Specialised spells it
   "Wangaratta":       regional-north-east
   "Yarrawonga":       regional-north-east
 
-  # Regional West (9)
+  # Regional West (10)
   "Ballarat":         regional-west
+  "Harcourt":         regional-west       # added 2026-06-16 (Specialised) — between Castlemaine & Bendigo (Inam call)
   "Ballarat Central": regional-west       # added 2026-05-25 (REA) — Ballarat CBD suburb
   "Bendigo":          regional-west
   "Bonshaw":          regional-west       # also catches "Bonshaw (Ballarat)" via parens-strip

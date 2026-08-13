@@ -117,6 +117,21 @@ def load_config(path: Path) -> RoutingConfig:
 
 _PARENS_TAIL = re.compile(r"\s*\([^)]*\)\s*$")
 
+# Some senders append a state and/or country to the suburb — Hermitage emits
+# "Winter Valley VIC, Australia". This MUST be stripped BEFORE the comma rule
+# below, because rsplit(",")[-1] would otherwise reduce that to "Australia"
+# and send every such row to uncategorised (added 2026-08-06, 3 live rows).
+#
+# Deliberately anchored on AUSTRALIA: the state name alone is only stripped as
+# part of a country-terminated tail, so a suburb whose final word merely looks
+# like a state abbreviation is never touched. A ", VIC" tail with no country
+# is NOT handled — it would fail visibly in the uncategorised warning rather
+# than route somewhere wrong, which is the safer failure for an unseen format.
+_STATE_COUNTRY_TAIL = re.compile(
+    r"[,\s]+(?:VIC|VICTORIA|NSW|QLD|SA|WA|TAS|NT|ACT)?[,\s]*AUSTRALIA\s*$",
+    re.IGNORECASE,
+)
+
 
 def _normalise_suburb(raw: Optional[str]) -> str:
     """Apply the pre-normalisation rules documented in suburbs.yml."""
@@ -124,6 +139,7 @@ def _normalise_suburb(raw: Optional[str]) -> str:
         return ""
     s = str(raw).strip()
     s = _PARENS_TAIL.sub("", s)
+    s = _STATE_COUNTRY_TAIL.sub("", s)
     if "," in s:
         s = s.rsplit(",", 1)[-1]
     return s.strip().upper()
