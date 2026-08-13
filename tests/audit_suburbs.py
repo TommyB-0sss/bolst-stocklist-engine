@@ -33,23 +33,13 @@ from lib.graph_read import (  # noqa: E402
     _default_cache_dir, _try_sender_for_attachment, fetch_all_for_builder,
     load_builders_config,
 )
-from lib.parsers.aldrich import parse as parse_aldrich  # noqa: E402
-from lib.parsers.aplace import parse as parse_aplace  # noqa: E402
-from lib.parsers.hermitage import parse as parse_hermitage  # noqa: E402
-from lib.parsers.luxton import parse as parse_luxton  # noqa: E402
+from lib.builder_roster import PARSERS  # noqa: E402
 from lib.parsers.rea_ignite import parse as parse_rea  # noqa: E402
-from lib.parsers.specialised import parse as parse_specialised  # noqa: E402
-from lib.parsers.urbane import parse as parse_urbane  # noqa: E402
 from lib.routing import _normalise_suburb, load_config  # noqa: E402
 
-PARSERS = {
-    "specialised": parse_specialised,
-    "aldrich":     parse_aldrich,
-    "urbane":      parse_urbane,
-    "hermitage":   parse_hermitage,
-    "aplace":      parse_aplace,
-    "luxton":      parse_luxton,
-}
+# PARSERS comes from lib/builder_roster.py — this script used to keep its own
+# copy, which drifted to 6 builders and reported "all suburbs map cleanly" for
+# builders it had never loaded.
 
 
 def _fetch_rea_csv() -> Path:

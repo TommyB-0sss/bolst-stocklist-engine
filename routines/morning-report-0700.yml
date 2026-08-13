@@ -30,6 +30,17 @@ sub_skill: compose-and-send
 prompt: |
   Run the bolst-stocklist-engine morning report.
 
+  0. Bootstrap the VM (cloud only). The repo is NOT auto-provisioned — private
+     -repo cloning via the OAuth/GitHub connector is unreliable in routine VMs
+     (shows "connected" but fails to clone; Anthropic issues #64130 / #60101).
+     Clone explicitly with the scoped read-only PAT, then provision:
+       git clone https://x-access-token:$GITHUB_PAT@github.com/TommyB-0sss/bolst-stocklist-engine
+       cd bolst-stocklist-engine
+       bash setup.sh            # venv + pip install + writes .credentials/token.json
+       source .venv/bin/activate
+     GITHUB_PAT (fine-grained, Contents:read on this repo only) and
+     BOLST_GRAPH_TOKEN_JSON are Routine env secrets.
+
   1. Compute today's report date in Australia/Melbourne (YYYY-MM-DD).
 
   2. Invoke skills/compose-and-send/send_report.py. The script will:

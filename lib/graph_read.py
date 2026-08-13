@@ -39,6 +39,7 @@ from __future__ import annotations
 import base64
 import fnmatch
 import re
+import sys
 from datetime import date as _date
 from datetime import datetime
 from pathlib import Path
@@ -442,6 +443,21 @@ def _fetch_html_link_mode(
         if not results:
             raise IngestError(
                 f"{builder_id}: no buttons resolved. Missing: {missing}"
+            )
+        if missing:
+            # PARTIAL ingest. Previously this returned silently, so a builder
+            # who shipped only one of two configured stocklists looked
+            # identical to a complete ingest and the missing packages vanished
+            # with no trace (found 2026-08-06: Aplace's "100% Upfront
+            # commission" and Luxton's "2 Part Stock List" had both dropped out
+            # of the senders' latest emails). Still non-fatal — a partial list
+            # beats holding the whole report — but it must be visible.
+            print(
+                f"    WARNING: {builder_id}: only {len(results)} of "
+                f"{len(buttons)} configured stocklist(s) resolved from the "
+                f"{latest.get('receivedDateTime', '?')} email. MISSING: "
+                f"{missing}. Those packages are ABSENT from this report.",
+                file=sys.stderr,
             )
         return results
 
