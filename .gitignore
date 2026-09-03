@@ -11,6 +11,9 @@ __pycache__/
 # Engine output (generated PDFs, run logs)
 output/
 
+# Temporary clones created by scheduled task runner
+repo/
+
 # Cached mailbox downloads (live builder PDFs/XLSX from Tom's Outlook)
 .cache/
 env-file.md
