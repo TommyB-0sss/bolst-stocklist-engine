@@ -28,7 +28,7 @@ schedule:
   # TWO weekday routines (2026-06-02): the 06:30 One Part poll was folded
   # into the 07:00 report (reads Tom's reply inline) — Routines are
   # stateless, so the old poll→.cache→report handoff was removed.
-  one_part_evening_prompt: "16:00"   # Mon-Fri (cron: 0 16 * * 1-5) - changed 2026-05-09 per Tom (was 17:00 daily)
+  # one_part_evening_prompt: "16:00"  # RETIRED 2026-09-11 per Tom - routine to be deleted in his claude.ai; morning report unaffected
   daily_build_send:        "07:00"   # Tue-Sat (cron: 0 7 * * 2-6) - reads Tom's One Part reply inline at send time
   # one_part_morning_poll: "06:30"   # REMOVED 2026-06-02 — folded into daily_build_send (see routines/one-part-morning-poll-0630.yml, deprecated)
   # one_part_cutoff:       "06:45"   # obsolete — no separate poll/cutoff; picks are whatever Tom sent before the 07:00 read

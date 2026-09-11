@@ -37,7 +37,7 @@ import requests
 
 from lib.auth import get_access_token
 from lib.graph_read import (
-    GRAPH_MESSAGES_ENDPOINT,
+    messages_endpoint,
     fetch_latest_for_builder,
     load_builders_config,
 )
@@ -62,7 +62,7 @@ def _search_thread(token: str, report_date_str: str) -> list[dict]:
     most-recent first. Anchor is the punctuation-free subject token;
     date match is a client-side substring so em-dash vs hyphen is moot."""
     response = requests.get(
-        GRAPH_MESSAGES_ENDPOINT,
+        messages_endpoint(),
         headers={"Authorization": f"Bearer {token}"},
         params={
             "$search": '"subject:Bolst One Part"',

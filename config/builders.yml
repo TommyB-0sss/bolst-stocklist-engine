@@ -209,8 +209,15 @@ builders:
     sender: tom@bolstpropertygroup.com.au
     ingestion: attachment
     subject_filter: "REA CSV"   # also injected into the Graph $search query
+    # 2026-09-11: Tom confirms he still emails the CSV every Monday, yet the
+    # engine's newest match was 30 Jul — so the miss is on our side. The
+    # sender + subject scope already makes the match safe; accept ANY .csv
+    # attachment so a differently named export (e.g. Ignite's native
+    # HomeLandPkg_Active_All_Agents_<date>.csv) is not skipped. Diagnose the
+    # real emails with tests/dump_latest_emails.py --builder rea.
     filename_patterns:
       - "REA*.csv"
+      - "*.csv"
     parser: parsers/rea_ignite.py
     routing:
       default: regional   # routing is by-suburb at render time, not via suburbs.yml region tags

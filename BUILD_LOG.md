@@ -1690,3 +1690,120 @@ assertions including every pre-existing case.
   3. Verify `Mail.Send` on the new token.
   4. Ask Tom: the week-old REA CSV (30 Jul), and whether Aplace/Luxton stopped
      sending those second stocklists on purpose.
+
+---
+
+## 2026-09-11 — Token outage #3 → app-only auth + external heartbeat (branch `app-only-auth-heartbeat`)
+
+**Trigger.** Friday call with Tom (06:52 PKT, Gemini notes in the project root):
+the 07:00 routine has produced nothing for weeks; the run log says
+"Reauthenticate". Tom reset his password after a hack attempt. Third auth
+outage of the year (10 Jul ageing, 4 Aug reset, now Sep). Tom also retired the
+One Part evening routine, reported Luxton changed their newsletter, and REA
+missing Warrnambool/Horsham. Decision: stop patching tokens; make auth
+credential-based and make failures impossible to miss.
+
+**Findings before coding.**
+  - The routine platform has NO failure notification. The `on_failure: notify:`
+    block in `routines/morning-report-0700.yml` was our own fiction — nothing
+    ever read it. That is why a dead engine stayed silent for weeks.
+  - Only two lines in the code assumed a signed-in user: the `/me/messages`
+    and `/me/sendMail` endpoint constants.
+  - Local `.credentials/token.json` was last refreshed 13 Aug and is the same
+    delegated grant, so it is dead too. `render_local.py` still fetches
+    builders via Graph — there is no "render from emailed files" mode.
+  - REA: newest ingested CSV is `20260730-REA CSV 30 7.csv` even in the 13 Aug
+    run. It has 2 Horsham + 4 Stawell rows and 0 Warrnambool (May/Jun files had
+    5–6). The 13 Aug PDF rendered Horsham fine. Upstream question for Tom.
+  - Luxton: `text_contains` button match on Stefan's MailChimp buttons
+    (incl. his "Sock" typo). Last fetched Luxton file: 6 Jul, one-part only.
+  - Repo has two `origin/claude/happy-goldberg-*` branches from Tom's own
+    Claude sessions on 3 Sep (gitignore line). Harmless.
+
+**Changes (all dormant until the new env vars exist — nothing breaks before consent).**
+  - `lib/auth.py` REWRITTEN: two modes behind one `get_access_token()`.
+    APP-ONLY (client credentials, `ConfidentialClientApplication`,
+    `.default` scope) selected automatically when
+    `BOLST_AZURE_CLIENT_CERT_PEM_B64` / `_PEM_PATH` / `BOLST_AZURE_CLIENT_SECRET`
+    is set; DELEGATED device flow kept as fallback. Certificate thumbprint +
+    expiry derived from the PEM bundle (cryptography). `graph_user_base()`
+    returns `/me` or `/users/<BOLST_MAILBOX>` (default = report sender).
+    `log_credential_expiry()` prints one line per run, WARNING ≤ 60 days,
+    offline (no MSAL construction). `--verify` flag GETs the inbox read-only.
+    Rejects `/common` authority up front. Never prints token material.
+  - `lib/graph_read.py`, `lib/graph_send.py`, `lib/one_part_collect.py`:
+    endpoint constants → `messages_endpoint()` / `sendmail_endpoint()`.
+  - `lib/heartbeat.py` NEW: Healthchecks.io-compatible dead-man's switch.
+    `start()` / `ok(summary)` / `fail(reason)`; no-op when
+    `BOLST_HEARTBEAT_URL` unset; never raises; never prints the URL; body =
+    counts + builder ids only (third-party service).
+  - `skills/compose-and-send/send_report.py`: `main()` → `_run()` returning
+    `(exit_code, summary)`; new `main()` pings start, then ok ONLY on Graph
+    202, /fail on HELD / non-202 / any exception (re-raised unchanged).
+    `--no-send` never pings. `log_credential_expiry()` at the top of every run.
+  - `setup.sh`: recognises the app-only vars; token cache now legacy; notes
+    when heartbeat is off. `.env.example`: full documentation of the new vars
+    + openssl recipe. `routines/morning-report-0700.yml`: fictional notify
+    block replaced by a note; 6→roster builders; heartbeat described.
+  - `RUNBOOK.md`: §1 evening routine RETIRED, §2 new vars, §5 marked LEGACY,
+    §7 new rows, §9 app-only procedure + rotation, §10 heartbeat.
+  - Tests NEW (offline): `tests/validate_auth_mode.py` (mode selection, PEM
+    parsing, thumbprint/expiry, error paths, endpoints follow mode),
+    `tests/validate_heartbeat.py` (stubbed requests: ok/fail/start URLs,
+    truncation, never-raise, URL never echoed).
+  - Project root: `Bolst_Tom_Call_2026-09-14_AppOnly_Cutover.md` — everything
+    needed from Tom and from his Entra app on Monday's call (permissions +
+    consent, certificate, Exchange application access policy PowerShell,
+    cloud env vars, verification order, device-code insurance path).
+
+**NOT DONE / Monday.** Tom: admin consent for APPLICATION `Mail.Read` +
+`Mail.Send`, certificate upload, Exchange access policy, env vars, delete the
+evening routine. Inam: generate cert + Healthchecks check beforehand; merge to
+main before the manual run; remove the legacy token secret; then Luxton fix and
+REA CSV check from Tom's forwarded mail. Nothing committed yet.
+
+**Verification (same session, offline — the dead token means no live Graph run).**
+`tests/validate_auth_mode.py` 36/36 PASS (one test constant corrected: 2028 is a
+leap year, 731 days). `tests/validate_heartbeat.py` 22/22 PASS. Wrapper
+simulation with `_run` stubbed: success → start+OK ping; HELD → start+/fail;
+crash → start+/fail then re-raised; `--no-send` success/crash → zero pings.
+Existing offline suite unchanged: validate_routing, validate_pick_apply,
+validate_one_part_notice, validate_report_pdf all PASS. `compileall` clean.
+`routines/one-part-*.yml` + `delivery.yml` marked RETIRED. NOTHING COMMITTED.
+
+**Decision (Inam, same day): client secret at Microsoft's 24-month portal
+maximum; certificate deferred.** Research: Microsoft caps portal secrets at 24
+months (Learn: how-to-add-credentials; M365 dev blog "client secret expiration
+now limited to two years"); longer only via PowerShell/Graph and advised
+against; tenant app-management policies can shorten or block secrets on newer
+apps (fallback = the certificate path, already in code). Tom doc, RUNBOOK §9,
+`.env.example` and the auth docstring reworded; code unchanged (both forms
+supported, certificate wins if both set). Secret created mid-Sep 2026 → expires
+mid-Sep 2028 → calendar reminder mid-Jun 2028; run log warns at 60 days.
+
+**Late-session changes (Inam's answers, 2026-09-11 evening).**
+  - **Heartbeat REMOVED entirely** — Inam: "remove heartbeat part, we don't need
+    it, I will remember the expiry date". `lib/heartbeat.py` + its test deleted;
+    `send_report.py` restored to main + only the `log_credential_expiry()` line
+    and import added; setup.sh / .env.example / routine yml / RUNBOOK (§10 gone)
+    cleaned. Consequence, recorded in RUNBOOK §9: there is NO failure alerting —
+    a missing report is noticed by Tom or by reading the run log.
+  - **Facts from Inam:** Tom IS the tenant admin; he still emails the REA CSV
+    every Monday (so the 30 Jul staleness is OUR lookup's miss); he has already
+    deleted the One Part evening routine; South Australia on hold; hack timing
+    irrelevant.
+  - **REA lookup broadened** (`config/builders.yml` rea.filename_patterns +=
+    `*.csv`): sender + "REA CSV" subject already scope the match, so any .csv
+    attachment (e.g. Ignite's native `HomeLandPkg_Active_All_Agents_<date>.csv`)
+    is accepted. Cannot verify without auth — a OneDrive-link instead of an
+    attachment, or a changed subject/sender, would still miss.
+  - **New diagnostic `tests/dump_latest_emails.py`** (read-only, either auth
+    mode): per recent email prints subject, date, from, attachments, every link
+    (text → href → `--resolve` final URL + content-type). Built for Monday:
+    `--builder rea` (why the CSV is missed) and `--builder luxton --resolve`
+    (Stefan's new newsletter). Luxton goal per Inam: "detect changes and extract
+    listing by any means" — design the format-agnostic extractor from the real
+    email once auth is back; no forwarding from Tom needed.
+  - Exchange application access policy stays in the Tom doc as OPTIONAL with a
+    plain explanation (application permissions are tenant-wide; the policy
+    narrows the app to Tom's mailbox; no functional effect).
