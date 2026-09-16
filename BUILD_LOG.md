@@ -1887,3 +1887,11 @@ morning routine, then remove BOLST_GRAPH_TOKEN_JSON_B64, then REA + Luxton dumps
 env; delete local `.credentials/token*.json`; Tom deletes the secret emails +
 rotates; Tom sends a current REA CSV; South Australia as its own region when
 Tom asks (split `interstate`); repo is PUBLIC (see memory) — decide.
+
+**Later 2026-09-16.** Inam removed `BOLST_GRAPH_TOKEN_JSON_B64` from the `bolst`
+cloud env; local `.credentials/token*.json` + `token.json.b64` deleted (dead
+delegated token; `domain_token.json` kept). App-only is now the only auth path
+in both places; device-code remains available as the insurance flow.
+**Workflow rule from Inam (same day): all work goes on `dev`, PR dev -> main,
+no new branches.** The one-off `luxton-aplace-interstate` branch was
+fast-forwarded into `dev` (54029ce) and deleted.
