@@ -57,8 +57,14 @@ def main() -> int:
         if len(rows) == 0:
             fails.append(f"{path.name}: 0 rows parsed")
 
-    if len(paths) < 2:
-        fails.append(f"expected 2 PDFs (Victoria + Upfront), got {len(paths)}")
+    # 2026-09-16: the "100% Upfront commission" button is marked optional in
+    # builders.yml (Aplace stopped publishing it in late July 2026), so one
+    # PDF is a valid live result. Two means it has come back.
+    if len(paths) < 1:
+        fails.append(f"expected at least the Victoria Stocklist PDF, got {len(paths)}")
+    victoria = [p for p in paths if "Victoria" in p.name]
+    if not victoria:
+        fails.append("Victoria Stocklist PDF (the required button) was not among the results")
 
     print("\n--- Live Aplace ingest checks ---")
     if fails:
@@ -67,7 +73,7 @@ def main() -> int:
             print(f"  - {f}")
         return 2
     total_rows = sum(len(parse_aplace(p)) for p in paths)
-    print(f"PASS - 2 Aplace PDFs ingested live, {total_rows} total rows.")
+    print(f"PASS - {len(paths)} Aplace PDF(s) ingested live, {total_rows} total rows.")
     return 0
 
 

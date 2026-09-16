@@ -44,8 +44,18 @@ regions:
     name: Regional West
   - id: warrnambool
     name: Warrnambool
+  # Added 2026-09-16 (Inam): Tom's Ignite export now carries South Australian
+  # and Tasmanian listings (Angle Vale SA; Gagebrook, George Town, Latrobe,
+  # Lawitta, New Norfolk, Westbury TAS). One catch-all region so they render
+  # and count on the cover; split into per-state regions when Tom asks.
+  # No banner artwork exists for it, so the render falls back to a brand-green
+  # title band (lib/pdf_render._draw_banner). Cover line is the 11th entry in
+  # lib/pdf_render.COVER_REGION_COUNTS with a code-drawn label.
+  - id: interstate
+    name: Interstate
 
 # Banner image filename per region, used by Stage 8 (PDF render).
+# `interstate` deliberately has no entry — see the note above.
 # Confirmed 2026-05-08 by visually inspecting each Green-NN.jpg — every
 # banner has the region name rendered in cursive script on the right side,
 # unambiguous mapping.
@@ -129,6 +139,7 @@ suburb_to_region:
   "Traralgon":        gippsland
   "Warragul":         gippsland
   "Wonthaggi":        gippsland       # added 2026-05-25 (REA) — Bass Coast
+  "Rosedale":         gippsland       # added 2026-09-16 (REA, Ridge Views Estate) — Latrobe Valley, east of Traralgon
   "Yinnar":           gippsland       # added 2026-05-25 (REA) — Latrobe Valley
 
   # Horsham (2)
@@ -141,6 +152,7 @@ suburb_to_region:
   "Beveridge":        metro-north
   "Bulla":            metro-north         # added 2026-06-16 (Aldrich) — Sunbury/Tullamarine corridor
   "Craigieburn":      metro-north
+  "Greenvale":        metro-north        # added 2026-09-16 (Aldrich, Dunhelen Estate) — City of Hume
   "Donnybrook":       metro-north
   "Epping":           metro-north
   "Kalkallo":         metro-north
@@ -162,13 +174,15 @@ suburb_to_region:
   "Rowville":         metro-south-east  # added 2026-06-16 (Hermitage) — SE metro, near Ferntree Gully
   "Clyde North":      metro-south-east
   "Cranbourne East":  metro-south-east
+  "Cranbourne West":  metro-south-east   # added 2026-09-16 (Hermitage, Harli Estate)
   "Nar Nar Goon":     metro-south-east  # borderline-ruled (Pakenham corridor)
   "Officer":          metro-south-east
   "Officer South":    metro-south-east  # added 2026-08-06 (Monaco) — Cardinia Shire, adjoins Officer; distinct locality, so
                                         # the bare "Officer" mapping does not cover it
   "Pakenham":         metro-south-east  # added 2026-05-25 (REA)
 
-  # Metro West (18)
+  # Metro West (19)
+  "Aintree":          metro-west         # added 2026-09-16 (Aldrich, Woodlea Estate) — City of Melton, Rockbank corridor
   "Bonnie Brook":     metro-west         # added 2026-08-05 (Monaco) — City of Melton, Rockbank/Fraser Rise corridor
   "Cobblebank":       metro-west
   "Plumpton":         metro-west         # added 2026-06-16 (Hermitage) — Rockbank/Fraser Rise corridor
@@ -222,3 +236,13 @@ suburb_to_region:
   # Warrnambool (2)
   "Portland":         warrnambool
   "Warrnambool":      warrnambool         # added 2026-05-25 (REA) — region name was missing its self-mapping
+
+  # Interstate (7) — added 2026-09-16 from Tom's 3 Sep Ignite export (13 listings
+  # were falling into per-suburb fallback sections with no cover line).
+  "Angle Vale":       interstate          # SA — City of Playford, northern Adelaide
+  "Gagebrook":        interstate          # TAS — Brighton LGA, north of Hobart
+  "George Town":      interstate          # TAS — Tamar Valley
+  "Latrobe":          interstate          # TAS — north-west coast (NOT the Latrobe Valley VIC)
+  "Lawitta":          interstate          # TAS — Derwent Valley
+  "New Norfolk":      interstate          # TAS — Derwent Valley
+  "Westbury":         interstate          # TAS — Meander Valley

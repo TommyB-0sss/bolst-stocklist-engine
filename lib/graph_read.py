@@ -328,6 +328,33 @@ GOOGLE_SHEETS_XLSX_CONTENT_TYPE = (
 )
 
 
+def _resolve_google_sheet_id(button_url: str) -> str:
+    """Follow a MailChimp/redirect chain to its final URL and return the
+    Google Sheet ID found there. Streams so the sheet body is never
+    downloaded here. Raises IngestError if the chain does not end on a
+    recognisable docs.google.com spreadsheet URL."""
+    response = requests.get(
+        button_url, allow_redirects=True, timeout=DEFAULT_TIMEOUT_SECONDS,
+        stream=True,
+    )
+    try:
+        response.raise_for_status()
+        final_url = response.url
+    finally:
+        response.close()
+    match = GOOGLE_SHEETS_ID_RE.search(final_url)
+    if not match:
+        raise IngestError(
+            f"google_sheets_xlsx: redirect chain ended at {final_url} — "
+            f"no spreadsheet ID found"
+        )
+    return match.group(1)
+
+
+def _sheet_xlsx_url(sheet_id: str) -> str:
+    return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
+
+
 def _resolve_google_sheets_xlsx_url(button_url: str) -> str:
     """Follow MailChimp/redirect chain to a Google Sheets URL, return /export?format=xlsx URL.
 
@@ -335,18 +362,218 @@ def _resolve_google_sheets_xlsx_url(button_url: str) -> str:
     IngestError if the final URL isn't on docs.google.com or doesn't
     contain a recognisable spreadsheet ID.
     """
-    response = requests.get(
-        button_url, allow_redirects=True, timeout=DEFAULT_TIMEOUT_SECONDS,
-    )
-    response.raise_for_status()
-    match = GOOGLE_SHEETS_ID_RE.search(response.url)
-    if not match:
-        raise IngestError(
-            f"google_sheets_xlsx: redirect chain ended at {response.url} — "
-            f"no spreadsheet ID found"
+    return _sheet_xlsx_url(_resolve_google_sheet_id(button_url))
+
+
+# ----- newsletter button resolution ----------------------------------------
+#
+# 2026-09-16 rework (Inam: "detect changes and extract the listing by any
+# means"). The original resolver looked at the LATEST email only and matched
+# fixed button labels. Two senders broke it the same month: Luxton's 27 Aug
+# newsletter carried no stock-list buttons at all (image-only promo), and
+# Aplace dropped its "100% Upfront commission" button from the weekly email
+# in late July. _resolve_buttons tries, per configured button:
+#
+#   1. the latest email (unchanged behaviour);
+#   2. older emails from the same sender, newest first, received within
+#      link_strategy.search_older_emails_days of today — a newsletter that
+#      happens to omit the button this week still linked it last month;
+#   3. for google_sheets_xlsx buttons, the button's fallback_sheet_id — the
+#      sheet is a live document, so its ID is a stable address even when no
+#      recent email links to it;
+#   4. otherwise the button is missing: WARNING if required, one plain info
+#      line if the button is marked optional (the sender stopped publishing
+#      that list; nothing to ingest).
+#
+# Live Google Sheets are cached under TODAY's date, not the email's, so a
+# sheet reached through an old email is still re-downloaded every morning.
+# PDFs keep the email's received date: a PDF is a snapshot, and the age
+# window stops a stale snapshot masquerading as current.
+#
+# Change detection: after resolving, every link in the latest email that
+# could lead to a spreadsheet (a Mailchimp tracking link or a direct
+# docs.google.com URL) is followed; a sheet ID that is neither a resolved
+# button nor a configured fallback is reported as a WARNING, so a renamed
+# button or a brand-new list is noticed the day it appears.
+
+_SHEET_LINK_HOST_HINTS = ("list-manage.com/", "docs.google.com/spreadsheets")
+_SHEET_LINK_SKIP_FRAGMENTS = (
+    "/about", "/profile", "/unsubscribe", "/track/open", "/vcard",
+    "list-manage.com/subscribe", "mailto:", "tel:",
+)
+_MAX_DETECTION_LINKS = 12
+
+
+def _candidate_sheet_links(html_body: str) -> list[tuple[str, str]]:
+    """(visible text, href) for links in an email body that could lead to a
+    Google Sheet. Footer/admin Mailchimp links are skipped."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html_body or "", "lxml")
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        low = href.lower()
+        if href in seen or not any(h in low for h in _SHEET_LINK_HOST_HINTS):
+            continue
+        if any(frag in low for frag in _SHEET_LINK_SKIP_FRAGMENTS):
+            continue
+        seen.add(href)
+        out.append(((a.get_text() or "").strip(), href))
+    return out[:_MAX_DETECTION_LINKS]
+
+
+def _detect_unknown_sheets(builder_id: str, html_body: str,
+                           known_ids: set[str]) -> None:
+    """WARN about spreadsheet links in the latest email that the config does
+    not know about. Never raises — this is a tripwire, not an ingest step."""
+    for text, href in _candidate_sheet_links(html_body):
+        direct = GOOGLE_SHEETS_ID_RE.search(href)
+        try:
+            sheet_id = direct.group(1) if direct else _resolve_google_sheet_id(href)
+        except Exception:
+            continue    # not a sheet, or a dead tracker — not this tripwire's job
+        if sheet_id in known_ids:
+            continue
+        known_ids.add(sheet_id)
+        print(
+            f"    WARNING: {builder_id}: the latest email links to a Google Sheet "
+            f"the config does not know ({sheet_id}, link text {text!r}). The "
+            f"sender may have added or renamed a stock list — open it and, if it "
+            f"is one, add a button / fallback_sheet_id in config/builders.yml.",
+            file=sys.stderr,
         )
-    sheet_id = match.group(1)
-    return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
+
+
+def _resolve_buttons(
+    builder_id: str,
+    strategy: dict,
+    buttons: list[dict],
+    messages: list[dict],
+    cache_dir: Path,
+    skip_cache: bool,
+) -> list[Path]:
+    """Layered resolution of `buttons` against `messages` (newest first, each
+    with an HTML body). See the comment block above for the four layers."""
+    from datetime import timedelta
+
+    latest = messages[0]
+    latest_html = (latest.get("body") or {}).get("content", "")
+    if not latest_html and not any(b.get("fallback_sheet_id") for b in buttons):
+        raise IngestError(f"{builder_id}: latest email has no HTML body to parse")
+
+    today = _date.today()
+    window_days = int(strategy.get("search_older_emails_days", 0) or 0)
+    cutoff = today - timedelta(days=window_days)
+
+    results: list[Path] = []
+    missing_required: list[str] = []
+    missing_optional: list[str] = []
+    known_sheet_ids: set[str] = set()
+    any_sheet_button = False
+
+    for btn in buttons:
+        text_match = btn.get("text_contains")
+        filename = btn.get("filename")
+        fmt = btn.get("format", "pdf")
+        if not (text_match and filename):
+            continue
+        is_sheet = fmt == "google_sheets_xlsx"
+        any_sheet_button = any_sheet_button or is_sheet
+        fallback_id = btn.get("fallback_sheet_id")
+        if fallback_id:
+            known_sheet_ids.add(fallback_id)
+
+        path: Optional[Path] = None
+        failures: list[str] = []
+
+        # Layers 1 + 2: the latest email, then older ones inside the window.
+        for idx, msg in enumerate(messages):
+            received = _parse_received_date(msg.get("receivedDateTime", ""))
+            if idx > 0 and received < cutoff:
+                break                              # newest-first: all older from here
+            html = (msg.get("body") or {}).get("content", "")
+            href = _extract_button_href(html, text_match) if html else None
+            if not href:
+                continue
+            try:
+                if is_sheet:
+                    sheet_id = _resolve_google_sheet_id(href)
+                    known_sheet_ids.add(sheet_id)
+                    path = _download_to_cache(
+                        _sheet_xlsx_url(sheet_id), cache_dir, filename, today,
+                        skip_cache,
+                        expected_content_types=(GOOGLE_SHEETS_XLSX_CONTENT_TYPE,),
+                    )
+                else:
+                    path = _download_to_cache(
+                        href, cache_dir, filename, received, skip_cache,
+                        expected_content_types=("application/pdf",),
+                    )
+            except requests.HTTPError as e:
+                status = e.response.status_code if e.response is not None else "?"
+                failures.append(f"HTTP {status} via the {received.isoformat()} email")
+                continue
+            except IngestError as e:
+                failures.append(f"{e} (via the {received.isoformat()} email)")
+                continue
+            if idx > 0:
+                print(
+                    f"    {builder_id}: '{text_match}' is not in the latest email; "
+                    f"resolved it from the {received.isoformat()} email instead.",
+                    file=sys.stderr,
+                )
+            break
+
+        # Layer 3: the configured live sheet.
+        if path is None and is_sheet and fallback_id:
+            try:
+                path = _download_to_cache(
+                    _sheet_xlsx_url(fallback_id), cache_dir, filename, today,
+                    skip_cache,
+                    expected_content_types=(GOOGLE_SHEETS_XLSX_CONTENT_TYPE,),
+                )
+                print(
+                    f"    {builder_id}: '{text_match}' is not linked from any email "
+                    f"in the last {window_days} day(s); fetched the configured sheet "
+                    f"{fallback_id} directly.",
+                    file=sys.stderr,
+                )
+            except (requests.HTTPError, IngestError) as e:
+                failures.append(f"fallback sheet {fallback_id}: {e}")
+
+        if path is not None:
+            results.append(path)
+            continue
+        detail = text_match + (f" [{'; '.join(failures)}]" if failures else "")
+        (missing_optional if btn.get("optional") else missing_required).append(detail)
+
+    if not results:
+        raise IngestError(
+            f"{builder_id}: no buttons resolved. Missing: "
+            f"{missing_required + missing_optional}"
+        )
+    if missing_required:
+        # PARTIAL ingest. Non-fatal — a partial list beats holding the whole
+        # report — but it must be visible (silent partials hid Aplace's and
+        # Luxton's dropped lists for weeks in 2026-08).
+        print(
+            f"    WARNING: {builder_id}: only {len(results)} of {len(buttons)} "
+            f"configured stocklist(s) resolved (latest email "
+            f"{latest.get('receivedDateTime', '?')}, searched {window_days} day(s) "
+            f"back). MISSING: {missing_required}. Those packages are ABSENT from "
+            f"this report.",
+            file=sys.stderr,
+        )
+    if missing_optional:
+        print(
+            f"    {builder_id}: optional list(s) the sender no longer publishes: "
+            f"{missing_optional}.",
+            file=sys.stderr,
+        )
+    if any_sheet_button and latest_html:
+        _detect_unknown_sheets(builder_id, latest_html, known_sheet_ids)
+    return results
 
 
 def _fetch_html_link_mode(
@@ -415,58 +642,11 @@ def _fetch_html_link_mode(
             ) from e
 
     if buttons:
-        body_html = (latest.get("body") or {}).get("content", "")
-        if not body_html:
-            raise IngestError(f"{builder_id}: latest email has no HTML body to parse")
-        results: list[Path] = []
-        missing: list[str] = []
-        for btn in buttons:
-            text_match = btn.get("text_contains")
-            filename = btn.get("filename")
-            fmt = btn.get("format", "pdf")
-            if not (text_match and filename):
-                continue
-            href = _extract_button_href(body_html, text_match)
-            if not href:
-                missing.append(text_match)
-                continue
-            try:
-                if fmt == "google_sheets_xlsx":
-                    download_url = _resolve_google_sheets_xlsx_url(href)
-                    expected = (GOOGLE_SHEETS_XLSX_CONTENT_TYPE,)
-                else:
-                    download_url = href
-                    expected = ("application/pdf",)
-                path = _download_to_cache(
-                    download_url, cache_dir, filename, received_date, skip_cache,
-                    expected_content_types=expected,
-                )
-                results.append(path)
-            except requests.HTTPError as e:
-                status = e.response.status_code if e.response is not None else "?"
-                missing.append(f"{text_match} (HTTP {status})")
-            except IngestError as e:
-                missing.append(f"{text_match} ({e})")
-        if not results:
-            raise IngestError(
-                f"{builder_id}: no buttons resolved. Missing: {missing}"
-            )
-        if missing:
-            # PARTIAL ingest. Previously this returned silently, so a builder
-            # who shipped only one of two configured stocklists looked
-            # identical to a complete ingest and the missing packages vanished
-            # with no trace (found 2026-08-06: Aplace's "100% Upfront
-            # commission" and Luxton's "2 Part Stock List" had both dropped out
-            # of the senders' latest emails). Still non-fatal — a partial list
-            # beats holding the whole report — but it must be visible.
-            print(
-                f"    WARNING: {builder_id}: only {len(results)} of "
-                f"{len(buttons)} configured stocklist(s) resolved from the "
-                f"{latest.get('receivedDateTime', '?')} email. MISSING: "
-                f"{missing}. Those packages are ABSENT from this report.",
-                file=sys.stderr,
-            )
-        return results
+        # Layered resolution (latest email -> older emails -> configured
+        # live sheet -> optional/missing); see _resolve_buttons.
+        return _resolve_buttons(
+            builder_id, strategy, buttons, messages, cache_dir, skip_cache,
+        )
 
     raise IngestError(
         f"{builder_id}: html_link ingestion has neither url_template nor "

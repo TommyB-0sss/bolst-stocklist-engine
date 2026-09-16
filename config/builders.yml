@@ -46,6 +46,11 @@ builders:
           filename: "Aplace-Victoria-Stocklist.pdf"
         - text_contains: "100% Upfront commission"
           filename: "Aplace-Upfront-Commission-Stocklist.pdf"
+          # 2026-09-16: absent from every weekly email since 28 Jul 2026 (checked
+          # 12 emails back in Tom's mailbox; the weekly only carries "Download –
+          # Victoria Stocklist" now). Optional = logged as an info line, not a
+          # WARNING. If Aplace brings it back it is picked up automatically.
+          optional: true
     filename_patterns:
       - "Aplace*GENERAL*Stock-List*.pdf"
       - "Aplace*GENERAL-Put-Call*Stock-List*.pdf"
@@ -101,14 +106,27 @@ builders:
     # we match it as "1 Part Sock List"). Each button is a MailChimp
     # tracking URL that 302-redirects to a public Google Sheet. We follow
     # the redirect, extract the sheet ID, and download via /export?format=xlsx.
+    #
+    # 2026-09-16: Stefan's newsletters are topic-driven and do not always carry
+    # the buttons (the 27 Aug "Dual Key Options" email had none, which killed
+    # Luxton for weeks). Both sheets have kept the SAME IDs since May 2026, so:
+    #   - search_older_emails_days: a button missing from the latest email is
+    #     taken from the newest older email (within the window) that has it;
+    #   - fallback_sheet_id: if no email in the window links it, the live
+    #     sheet is fetched by ID directly;
+    #   - any other spreadsheet link in the latest email is reported as a
+    #     WARNING (new/renamed list tripwire). See lib/graph_read._resolve_buttons.
     link_strategy:
+      search_older_emails_days: 120
       buttons:
         - text_contains: "1 Part Sock List"
           filename: "Luxton-One-Part-Stocklist.xlsx"
           format: google_sheets_xlsx
+          fallback_sheet_id: "1vvz70UXWnhl4G9GLswJVgrEC76EJzqZ8larO91XJFac"   # "One Part Contracts" sheet
         - text_contains: "2 Part Stock List"
           filename: "Luxton-House-Land-Stocklist.xlsx"
           format: google_sheets_xlsx
+          fallback_sheet_id: "1pv33VKYVLHmxu58Fu9373xN7nfAFycSo2atGVddNSHM"   # "House & Land Packages" sheet
     filename_patterns:
       - "Luxton*HOUSE*LAND*STOCKLIST*.xlsx"
       - "Luxton*House-Land-Stocklist*.xlsx"   # alias for live-mode filename
