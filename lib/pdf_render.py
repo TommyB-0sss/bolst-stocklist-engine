@@ -252,18 +252,41 @@ def _truncate_to_width(pdf: FPDF, text: str, max_width_mm: float) -> str:
 
 # ----- region rendering ----------------------------------------------------
 
-def _draw_banner(pdf: FPDF, banner_path: Optional[Path]) -> None:
+def _draw_banner(pdf: FPDF, banner_path: Optional[Path],
+                 region_name: Optional[str] = None) -> None:
     """Place region banner image at the top of the current page.
 
     Full-bleed (x=0, y=0, w=PAGE_WIDTH) so the branded green band runs
     edge-to-edge. Tom flagged 2026-05-25 that the prior inset (10mm white
     strips on the sides + top) looked unfinished. The cover page is
     already full-bleed; this matches it.
+
+    A region with no banner artwork (added 2026-09-16 for `interstate`)
+    gets a code-drawn stand-in with the same geometry and palette: the
+    brand-green band, the gold/white two-line title on the left and the
+    region name on the right. The designer can replace it by dropping a
+    `Header for stocklist Green-NN.jpg` into assets/headers and adding the
+    region to `region_banner` in config/suburbs.yml — no code change.
     """
     if banner_path and banner_path.exists():
         pdf.image(str(banner_path),
                   x=0, y=0,
                   w=PAGE_WIDTH_MM, h=BANNER_HEIGHT_MM)
+    elif region_name:
+        pdf.set_fill_color(*COLOR_BRAND_GREEN)
+        pdf.rect(0, 0, PAGE_WIDTH_MM, BANNER_HEIGHT_MM, style="F")
+        pdf.set_font("Helvetica", style="", size=13)
+        pdf.set_text_color(*COVER_COUNT_COLOR)            # brand gold
+        pdf.set_xy(MARGIN_MM, 9)
+        pdf.cell(150, 7, "F I X E D   P R I C E   T U R N K E Y", align="L")
+        pdf.set_font("Helvetica", style="", size=21)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_xy(MARGIN_MM, 18)
+        pdf.cell(150, 10, "HOUSE & LAND PACKAGES", align="L")
+        pdf.set_font("Helvetica", style="BI", size=26)
+        pdf.set_xy(PAGE_WIDTH_MM - MARGIN_MM - 120, 12)
+        pdf.cell(120, 16, _safe_latin1(region_name), align="R")
+        pdf.set_text_color(0, 0, 0)
     # Content cursor still respects MARGIN_MM left/right + the prior
     # vertical position (banner-bottom + gap) so the table layout doesn't
     # shift relative to the page.
@@ -449,7 +472,7 @@ def _render_region(pdf: FPDF, region_id: str, region_name: str,
     suburbs that map to this region. Sort + table layout are uniform.
     """
     pdf.add_page()
-    _draw_banner(pdf, banner_path)
+    _draw_banner(pdf, banner_path, region_name=region_name)
     _draw_subtitle(pdf, report_date, len(rows), section_title=region_name)
 
     if notice:
@@ -767,8 +790,23 @@ COVER_REGION_COUNTS = [
     ("regional-north-east", 126.6),  # 127.71..129.83
     ("regional-west",      132.8),  # 133.89..136.00
     ("warrnambool",        139.1),  # 140.24..142.18
+    # 11th row, added 2026-09-16: the artwork stops at Warrnambool, so this
+    # row's LABEL is drawn by code too (see COVER_REGION_LABELS). y = the
+    # design's row pitch (6.23mm avg over the 10 printed rows) past Warrnambool.
+    ("interstate",         145.3),
 ]
 COVER_COUNT_X = 253.0
+# Region rows the artwork has no printed label for. Drawn in the same
+# Letter-space coordinate system as the counts. x measured 2026-09-16 from the
+# rendered A4 cover: every printed label starts at x=176.0mm A4 (=165.6 Letter);
+# label colour sampled from the printed "Warrnambool" glyphs.
+COVER_REGION_LABELS = {
+    "interstate": "Interstate",
+}
+COVER_LABEL_X = 164.6   # 165.6 measured, minus fpdf's 1mm cell padding so glyphs start where the printed labels do
+COVER_LABEL_W = 80.0
+COVER_LABEL_FONT_SIZE = 9
+COVER_LABEL_COLOR = (186, 193, 191)
 COVER_COUNT_W = 10.0
 COVER_COUNT_H = 4.5
 COVER_COUNT_FONT_SIZE = 9
@@ -948,6 +986,21 @@ def _render_cover_onto(pdf: FPDF,
     # the whole row (region name through count).
     region_links: dict[str, int] = {}
     for region_id, y in COVER_REGION_COUNTS:
+        label = COVER_REGION_LABELS.get(region_id)
+        if label:
+            # Row the artwork has no printed label for: write it in the same
+            # cell geometry as the count so the two sit on one baseline.
+            _mask_and_write(
+                pdf,
+                x=_scaled_x(COVER_LABEL_X), y=_scaled_y(y),
+                w=COVER_LABEL_W * COVER_X_SCALE,
+                h=COVER_COUNT_H * COVER_Y_SCALE,
+                text=label,
+                font_size=COVER_LABEL_FONT_SIZE,
+                style="",
+                color=COVER_LABEL_COLOR,
+                align="L",
+            )
         _mask_and_write(
             pdf,
             x=_scaled_x(COVER_COUNT_X), y=_scaled_y(y),

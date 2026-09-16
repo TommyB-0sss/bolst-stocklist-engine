@@ -1827,3 +1827,71 @@ Mail.Send with admin consent, 24-month client secret) and set
 BOLST_AZURE_CLIENT_SECRET + BOLST_AZURE_CLIENT_SECRET_EXPIRES in the `bolst`
 Claude environment. Next: PR dev -> main opened and merged, then "Run now" on the
 morning routine, then remove BOLST_GRAPH_TOKEN_JSON_B64, then REA + Luxton dumps.
+
+**2026-09-16 (Wed) — cutover DONE on the call; Luxton, Aplace, Interstate shipped after.**
+  - **App-only auth LIVE.** Two mis-steps found and fixed on the call: the secret
+    was in `.env` under the wrong names (`AZURE_CLIENT_SECRET_VALUE` /
+    `_EXPIRY=2026-9-15`) and the first value was a 38-char mis-copy
+    (AADSTS7000215). Then a 403 with an empty `roles` claim = admin consent
+    granted for DELEGATED not APPLICATION permissions; Tom re-consented,
+    token now carries `Mail.Read` + `Mail.Send`. `lib/auth.py --verify` reaches
+    the inbox (8,547 items), expiry countdown 730 days (2028-09-15).
+  - **Mail.Send VERIFIED for the first time**: Tom's "Run now" on the cloud
+    routine delivered `Bolst Stocklist - Wed 16 Sep` (41pp, 14.5 MB) to his
+    inbox at 03:54Z. Local `--no-send` render matched (672 packages).
+  - **Secret hygiene issue**: Tom emailed the secret value to himself ("secret
+    val", 03:45Z) to hand it over. Advised: delete from Inbox/Sent/Deleted,
+    rotate when convenient (RUNBOOK §9, zero downtime). Not yet done.
+  - **REA root cause (Tom's Warrnambool/Horsham complaint)**: the lookup only
+    matched `REA*.csv`; Tom's exports since Sep carry Ignite's native name
+    `HomeLandPkg_Active_All_Agents_<date>.csv`, so the engine sat on the 30 Jul
+    file. The `*.csv` broadening (668f5c4) picks up the 3 Sep file — cover now
+    shows Warrnambool 4 / Horsham 8. Upstream: Tom's newest CSV is 3 Sep (sent
+    twice); nothing on 8 or 15 Sep. He needs to send a fresh one.
+  - **Luxton FIXED** (`lib/graph_read._resolve_buttons`, config in builders.yml):
+    layered resolver — latest email → older emails within
+    `search_older_emails_days` (120) → per-button `fallback_sheet_id` → missing.
+    Live sheets now cached under TODAY's date (were frozen to the email's date).
+    Tripwire: any unknown spreadsheet link in the latest email → WARNING.
+    Live: '1 Part' resolved from the 6 Jul email, '2 Part' from 24 Jun; 10 + 13
+    rows. Both sheet IDs unchanged since May 2026. The 27 Aug "Dual Key Options"
+    email has no stock-list links at all (image-only promo + GoDaddy banner).
+  - **Aplace**: the "100% Upfront commission" button has been absent from every
+    weekly email since 28 Jul (12 emails checked). Marked `optional: true` →
+    one info line instead of a WARNING; auto-resumes if it returns.
+    `tests/validate_graph_read_aplace.py` now expects ≥1 PDF incl. Victoria.
+  - **Interstate region** (item 5, Inam: "show the data in the best section"):
+    new region `interstate` in suburbs.yml for Angle Vale (SA) + Gagebrook,
+    George Town, Latrobe, Lawitta, New Norfolk, Westbury (TAS) = 12 REA
+    listings that were in 7 per-suburb fallback pages with no cover line.
+    11th cover row `("interstate", 145.3)` with a CODE-DRAWN label
+    (`COVER_REGION_LABELS`; x/colour measured from the artwork). No banner
+    artwork → `_draw_banner` falls back to a brand-green band (gold/white
+    title left, region name right). Designer can drop a Green-11.jpg in later.
+    Also mapped: Aintree→metro-west, Greenvale→metro-north, Cranbourne West→
+    metro-south-east (Aldrich/Hermitage, 6 rows were dropped), Rosedale→gippsland.
+  - **Verification**: full `--no-send` render — 8/8 builders, 636 rows, 585 kept,
+    REA 127, ZERO warnings (uncategorised 0, fallback 0), 35pp, cover 712 =
+    sum of 11 lines. Offline: validate_routing PASS (514), validate_report_pdf
+    PASS (11 regions), validate_a1_counts 0 issues, validate_aplace PASS,
+    one_part_notice 3/3, pick_apply 0 fail, NEW `tests/validate_button_resolver.py`
+    23/23 (stubbed; covers all 4 layers, pdf age window, optional, tripwire,
+    download failure). Live: validate_graph_read_luxton PASS (2 XLSX),
+    validate_graph_read_aplace PASS (1 PDF). Pre-existing, unrelated:
+    validate_luxton (static May samples) reports 2 H&L rows missing status.
+  - New diagnostic `tests/dump_routing.py` (uncategorised rows + unmapped REA
+    suburbs with builder/estate/lot). `tests/dump_latest_emails.py` crashes on
+    emoji subjects under cp1252 — run with `PYTHONIOENCODING=utf-8` (fix later).
+
+**Still open after today**: remove `BOLST_GRAPH_TOKEN_JSON_B64` from the cloud
+env; delete local `.credentials/token*.json`; Tom deletes the secret emails +
+rotates; Tom sends a current REA CSV; South Australia as its own region when
+Tom asks (split `interstate`); repo is PUBLIC (see memory) — decide.
+
+**Later 2026-09-16.** Inam removed `BOLST_GRAPH_TOKEN_JSON_B64` from the `bolst`
+cloud env; local `.credentials/token*.json` + `token.json.b64` deleted (dead
+delegated token; `domain_token.json` kept). App-only is now the only auth path
+in both places; device-code remains available as the insurance flow.
+**Workflow rule from Inam (same day): all work goes on `dev`, PR dev -> main,
+no new branches.** The one-off `luxton-aplace-interstate` branch was
+fast-forwarded into `dev` (54029ce) and deleted.
