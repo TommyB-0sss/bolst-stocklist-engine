@@ -1807,3 +1807,23 @@ mid-Sep 2028 → calendar reminder mid-Jun 2028; run log warns at 60 days.
   - Exchange application access policy stays in the Tom doc as OPTIONAL with a
     plain explanation (application permissions are tenant-wide; the policy
     narrows the app to Tom's mailbox; no functional effect).
+
+**COMMITTED + PUSHED 2026-09-11:** `668f5c4` on branch `dev` (renamed from
+`app-only-auth-heartbeat`), author Inam (Apex AI) <inam@meetapex.ai>, 16 files.
+PR dev -> main NOT yet opened (gh pr create blocked by the local tool
+permission layer; Inam opens it by hand). Merge before the Monday manual run.
+
+**End of day 2026-09-11.** Commit `668f5c4` is on `origin/dev`. Inam reports the PR dev -> main as created, but `gh pr list --head dev` showed NO pull request at 2026-09-11 13:24Z (only #1 and #2, both merged). VERIFY it exists and merge it BEFORE the Monday 14 Sep manual routine run; if missing, open it from https://github.com/TommyB-0sss/bolst-stocklist-engine/compare/main...dev?expand=1 (body drafted in this session's scratchpad pr_body.md).
+Monday 14 Sep sequence: Tom grants APPLICATION Mail.Read + Mail.Send + admin
+consent, creates the 24-month client secret; set BOLST_AZURE_CLIENT_SECRET +
+BOLST_AZURE_CLIENT_SECRET_EXPIRES in the `bolst` cloud env; merge dev -> main;
+"Run now"; then remove BOLST_GRAPH_TOKEN_JSON_B64. Then run
+tests/dump_latest_emails.py for rea + luxton and fix ingestion from what it shows.
+Session closed by Inam ("will talk later, that's it for today").
+
+**2026-09-16 (Wed) — cutover call with Tom.** Monday 14 Sep did not happen; this
+is the rescheduled call. Tom completed the Entra side (APPLICATION Mail.Read +
+Mail.Send with admin consent, 24-month client secret) and set
+BOLST_AZURE_CLIENT_SECRET + BOLST_AZURE_CLIENT_SECRET_EXPIRES in the `bolst`
+Claude environment. Next: PR dev -> main opened and merged, then "Run now" on the
+morning routine, then remove BOLST_GRAPH_TOKEN_JSON_B64, then REA + Luxton dumps.
