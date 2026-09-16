@@ -47,9 +47,16 @@ from typing import Any, Optional
 
 import requests
 
-from lib.auth import get_access_token
+from lib.auth import get_access_token, graph_user_base
 
-GRAPH_MESSAGES_ENDPOINT = "https://graph.microsoft.com/v1.0/me/messages"
+
+def messages_endpoint() -> str:
+    """Mailbox messages collection for the active auth mode (lib.auth):
+    /me/messages with a delegated token, /users/<mailbox>/messages with an
+    app-only token. A function, not a constant, so the mode can be decided
+    by the environment at call time."""
+    return f"{graph_user_base()}/messages"
+
 DEFAULT_TIMEOUT_SECONDS = 30
 DEFAULT_TOP_MESSAGES = 20
 
@@ -137,7 +144,7 @@ def _list_recent_messages_from(token: str, sender: str, top: int,
         "$top": str(top),
         "$select": "id,subject,receivedDateTime,sentDateTime,hasAttachments",
     }
-    data = _graph_get(GRAPH_MESSAGES_ENDPOINT, token, params=params)
+    data = _graph_get(messages_endpoint(), token, params=params)
     messages = data.get("value", [])
     messages.sort(key=lambda m: m.get("receivedDateTime", ""), reverse=True)
     return messages
@@ -145,7 +152,7 @@ def _list_recent_messages_from(token: str, sender: str, top: int,
 
 def _list_attachments(token: str, message_id: str) -> list[dict]:
     """Return all attachments for a message, with contentBytes inline."""
-    url = f"{GRAPH_MESSAGES_ENDPOINT}/{message_id}/attachments"
+    url = f"{messages_endpoint()}/{message_id}/attachments"
     data = _graph_get(url, token)
     return data.get("value", [])
 
@@ -167,7 +174,7 @@ def _list_recent_messages_with_body(token: str, sender: str, top: int) -> list[d
         "$top": str(top),
         "$select": "id,subject,receivedDateTime,hasAttachments,body",
     }
-    data = _graph_get(GRAPH_MESSAGES_ENDPOINT, token, params=params)
+    data = _graph_get(messages_endpoint(), token, params=params)
     messages = data.get("value", [])
     messages.sort(key=lambda m: m.get("receivedDateTime", ""), reverse=True)
     return messages

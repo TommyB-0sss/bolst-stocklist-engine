@@ -47,6 +47,7 @@ from lib.pdf_render import build_report_pdf                              # noqa:
 from lib.pick_apply import apply_picks                                   # noqa: E402
 from lib.routing import ONE_PART_REGION_ID, load_config, route           # noqa: E402
 from lib.status_filter import load_drop_list, should_keep                # noqa: E402
+from lib.auth import log_credential_expiry                               # noqa: E402
 
 load_dotenv(BUNDLE_ROOT / ".env")
 MELBOURNE = ZoneInfo("Australia/Melbourne")
@@ -205,6 +206,9 @@ def main(argv: list[str]) -> int:
     print(f"Recipient:   {os.environ['BOLST_REPORT_RECIPIENT']}")
     print(f"Sender:      {os.environ['BOLST_REPORT_SENDER']}")
     print(f"No-send:     {no_send}\n")
+    # One line per run answering 'which auth mode, and when does it expire?'
+    # (lib/auth.py). A broken app-only config raises here, before any Graph call.
+    log_credential_expiry()
 
     # 1. Ingest every builder in the PARSERS roster
     print(f"Ingesting all {len(PARSERS)} builders live from Outlook...")

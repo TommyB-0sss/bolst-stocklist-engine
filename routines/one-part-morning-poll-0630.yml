@@ -1,3 +1,9 @@
+# RETIRED 2026-09-11 at Tom's request (Friday call): the One Part evening
+# prompt is no longer wanted. Tom deletes the live routine himself at
+# claude.ai/code/routines (routines cannot be deleted via the API). The
+# morning report keeps working without it: with no reply it applies no
+# picks and ships the auto-flagged One Part rows. Kept for history only.
+
 # routines/one-part-morning-poll-0630.yml
 # ---
 # ⚠️ DEPRECATED 2026-06-02 — DO NOT CREATE THIS ROUTINE.

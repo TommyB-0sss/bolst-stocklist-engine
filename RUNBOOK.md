@@ -12,8 +12,8 @@ Each weekday the engine:
 
 | Time (Australia/Melbourne) | Day | Routine | Action |
 |---|---|---|---|
-| **16:00** | Mon–Fri | `bolst-one-part-evening` | Email Tom the day's Specialised One Part *candidates*. He replies with the lots he wants on the One Part tab. |
-| **07:00** | Tue–Sat | `bolst-morning-report` | Fetch all 6 builders + REA live, read Tom's overnight reply **inline**, apply his picks, render the branded PDF (clickable cover), send it. |
+| ~~16:00~~ | ~~Mon–Fri~~ | ~~`bolst-one-part-evening`~~ | **RETIRED 2026-09-11 at Tom's request.** Tom deletes it at claude.ai/code/routines. The morning report still carries the auto-flagged One Part rows; only the reply-driven picks stop. |
+| **07:00** | Tue–Sat | `bolst-morning-report` | Fetch every roster builder (`lib/builder_roster.py`, 8 as of 2026-08) + REA live, read Tom's overnight reply **inline** (no-op once the evening routine is gone), apply his picks, render the branded PDF (clickable cover), send it. |
 
 > **Two routines only.** The old 06:30 poll was folded into the 07:00 report
 > (2026-06-02) — Routines are stateless, so the report reads Tom's reply
@@ -34,14 +34,19 @@ list. Locally these live in `.env` (gitignored). In the cloud they are
 
 | Var | Purpose |
 |---|---|
-| `BOLST_AZURE_CLIENT_ID` | Entra app (public client) |
+| `BOLST_AZURE_CLIENT_ID` | Entra app registration in Bolst's tenant |
 | `BOLST_AZURE_TENANT_ID` | Bolst tenant |
-| `BOLST_AZURE_AUTHORITY` | `https://login.microsoftonline.com/<tenant-id>` |
-| `BOLST_AZURE_SCOPES` | `Mail.Read Mail.Send Mail.ReadWrite` |
+| `BOLST_AZURE_AUTHORITY` | `https://login.microsoftonline.com/<tenant-id>` — must be tenant-specific, never `/common` (app-only requires it) |
+| `BOLST_AZURE_SCOPES` | `Mail.Read Mail.Send Mail.ReadWrite` — delegated (legacy) mode only; app-only uses `.default` |
+| `BOLST_AZURE_CLIENT_SECRET` (+ `_EXPIRES`) | **App-only credential — the form chosen 2026-09-11.** Client secret (portal max 24 months) + its portal expiry date `YYYY-MM-DD` so every run logs the countdown. See §9. |
+| `BOLST_AZURE_CLIENT_CERT_PEM_B64` | App-only alternative (deferred): base64, one line, of a PEM bundle = private key + certificate. Thumbprint and expiry derived from it. Wins over the secret if both set. See §9. |
+| `BOLST_AZURE_CLIENT_CERT_PEM_PATH` | Local-dev form of the certificate alternative: path to the same PEM bundle. |
+| `BOLST_MAILBOX` | Mailbox to read from / send as in app-only mode. Defaults to `BOLST_REPORT_SENDER`; normally unset. |
+| `BOLST_AUTH_MODE` | `auto` (default) / `app` / `delegated` — debugging override only. |
 | `BOLST_REPORT_SENDER` | Report sent FROM (Tom's Outlook) |
 | `BOLST_REPORT_RECIPIENT` | Report sent TO — single address or comma-separated list. **Source of truth for the recipient — NOT delivery.yml.** Live = Tom (+ reps Aaron Wilson / Howard Rock once their addresses are confirmed). |
 | `BOLST_ONE_PART_RECIPIENT` | Evening prompt recipient (Tom) |
-| `BOLST_GRAPH_TOKEN_JSON` | **Cloud only.** Full contents of `.credentials/token.json` (the MSAL token cache). `setup.sh` writes it to disk on the VM. See §5. |
+| `BOLST_GRAPH_TOKEN_JSON_B64` / `BOLST_GRAPH_TOKEN_JSON` | **LEGACY delegated mode, cloud only.** Base64 (or raw) of `.credentials/token.json`. `setup.sh` writes it to disk on the VM. Dies on every Tom password reset — superseded by the app-only credential above (§9). Remove once app-only is live. |
 
 ---
 
@@ -127,9 +132,14 @@ Vercel fallback (`../Bolst_Hosting_Options.md`) — decided before, not during.
 
 ---
 
-## 5. OAuth in a headless VM (the critical caveat)
+## 5. OAuth in a headless VM (LEGACY — superseded by §9 app-only auth)
 
-`lib/auth.py` uses **device-code flow** — interactive sign-in, impossible on
+> **Read §9 first.** Everything below describes the delegated (device-code)
+> design that failed three times in 2026 (10 Jul ageing, 4 Aug and Sep
+> password resets). It is kept only as the fallback until the app-only
+> credential is live in the cloud.
+
+In delegated mode `lib/auth.py` uses **device-code flow** — interactive sign-in, impossible on
 an unattended VM. So the cloud never signs in; it reuses a **pre-captured
 refresh token**.
 
@@ -184,7 +194,10 @@ the pilot setup. Instead:
 
 | Symptom | Likely cause | Action |
 |---|---|---|
-| `invalid_grant` / auth fails on the VM | Refresh token expired or replay-rejected | Re-capture token (§5), update `BOLST_GRAPH_TOKEN_JSON`; revisit Phase B |
+| `[auth] ... credential expires ... WARNING` / `EXPIRED` in the run log | App certificate or secret nearing/past its end date | Rotate per §9 (add the new credential in Entra BEFORE removing the old one → zero downtime) |
+| `AADSTS7000215` invalid client secret / `AADSTS700027` certificate | Wrong or stale `BOLST_AZURE_CLIENT_SECRET` / PEM bundle, or cert not uploaded to the app | Compare the thumbprint `python lib/auth.py` prints with the one in Entra → Certificates & secrets |
+| `401`/`403` on `/users/<mailbox>/...` in app-only mode | Admin consent missing for the APPLICATION permissions, or the Exchange application access policy excludes the mailbox | Entra → API permissions: green ticks on **Application** `Mail.Read` + `Mail.Send`; `Test-ApplicationAccessPolicy` must say Granted; policy changes take up to an hour |
+| `invalid_grant` / auth fails on the VM (delegated mode) | Refresh token expired, replay-rejected or revoked by a password reset | Migrate to app-only (§9). Stop-gap: re-capture token (§5), update `BOLST_GRAPH_TOKEN_JSON_B64` |
 | Report ships but a builder is missing | That builder's email/format changed | Check the run log's `SKIP:` line; report is per-builder tolerant (still ships) |
 | `ModuleNotFoundError` on the VM | Dep missing from `requirements.txt` | Add + pin it; re-verify against the venv |
 | One Part tab shows no picks though Tom replied | Subject prefix mismatch or reply not found | Confirm Tom replied on the `[Bolst One Part — <date>]` thread; run `skills/one-part-collect/run.py` to inspect |
@@ -200,3 +213,91 @@ the pilot setup. Instead:
 - **Reps:** the var takes a comma-separated list — append Aaron Wilson +
   Howard Rock once their addresses are confirmed. Update the secret in the
   cloud environment; no code change.
+
+---
+
+## 9. App-only Graph auth (client credentials) — the permanent fix
+
+**Why (2026-09-11).** The delegated design froze a *user* refresh token into a
+static cloud secret. It died three times in 2026: ~1-month ageing (10 Jul), Tom's
+password reset (4 Aug), and the hack-attempt reset (Sep). Client credentials hold
+no refresh token — every run mints a fresh ~1-hour access token from the app's
+own certificate — so password resets and ageing cannot revoke it. The only
+maintenance left is the credential's own expiry, a known date the engine logs on
+every run (`[auth] ... credential expires YYYY-MM-DD (N days)`, WARNING ≤ 60).
+
+**Not literally permanent — what can still break it:** the certificate/secret
+expiring (planned, logged), someone deleting the app registration or its consent
+(deliberate), Tom's M365 licence lapsing. Nothing accidental.
+
+**How it works in code.** `lib/auth.py` picks app-only automatically when
+`BOLST_AZURE_CLIENT_CERT_PEM_B64` (or `_PEM_PATH`, or `BOLST_AZURE_CLIENT_SECRET`)
+is set, requests `https://graph.microsoft.com/.default`, and every mailbox call
+goes to `/users/<BOLST_MAILBOX>/...` instead of `/me/...`
+(`graph_user_base()`). Without those vars it falls back to the legacy device flow
+(§5), so the change is dormant until the tenant work below is done.
+
+**One-time tenant setup (Tom or his tenant admin; full click-path in
+`../Bolst_Tom_Call_2026-09-14_AppOnly_Cutover.md`):**
+
+1. **Application permissions + admin consent.** Entra → App registrations → the
+   engine's app (client id in `.env`) → API permissions → Add → Microsoft Graph →
+   **Application** permissions `Mail.Read` + `Mail.Send` → **Grant admin consent**.
+   Green ticks on both.
+2. **Credential — client secret.** Decision 2026-09-11 (Inam): Microsoft's
+   24-month maximum is enough for now; the certificate is deferred. Entra →
+   Certificates & secrets → Client secrets → New client secret → description
+   `bolst-engine-cloud-<yyyy-mm>`, Expires **24 months** (730 days — the portal
+   maximum; longer is possible only via PowerShell/Graph and Microsoft advises
+   against it) → Add → copy the **Value** at once (shown only once; the Secret
+   ID is not it). It goes into exactly two places: Inam's local `.env` (for the
+   verify run) and the `bolst` cloud environment, as `BOLST_AZURE_CLIENT_SECRET`
+   plus `BOLST_AZURE_CLIENT_SECRET_EXPIRES=YYYY-MM-DD` (the date the portal
+   shows). Never into chat, email or a document.
+   *Alternative, kept in code — use if the tenant's app management policy
+   refuses to create a secret, or when a longer-lived credential is wanted:*
+   certificate. On Inam's machine (Git Bash, bundle root; `.credentials/` is
+   gitignored):
+   `openssl req -x509 -newkey rsa:2048 -sha256 -days 1095 -nodes -subj "/CN=bolst-stocklist-engine" -keyout .credentials/bolst-engine.key -out .credentials/bolst-engine.cer`
+   then `cat .credentials/bolst-engine.key .credentials/bolst-engine.cer > .credentials/bolst-engine.pem`
+   and `base64 -w0 .credentials/bolst-engine.pem > .credentials/bolst-engine.pem.b64`
+   → `BOLST_AZURE_CLIENT_CERT_PEM_B64`. Upload **only `bolst-engine.cer`**
+   (public half) under Certificates. The engine derives thumbprint + expiry
+   from the bundle. Certificate wins if both forms are set.
+3. **Restrict the app to Tom's mailbox** (application permissions are tenant-wide
+   by default). Exchange Online PowerShell as an Exchange admin:
+   `New-DistributionGroup -Name "Bolst Stocklist Engine Scope" -Alias bolst-engine-scope -Type Security -Members tom@bolstpropertygroup.com.au`
+   then `New-ApplicationAccessPolicy -AppId <client-id> -PolicyScopeGroupId bolst-engine-scope@bolstpropertygroup.com.au -AccessRight RestrictAccess -Description "Bolst stocklist engine: Tom's mailbox only"`
+   and verify with `Test-ApplicationAccessPolicy -Identity tom@bolstpropertygroup.com.au -AppId <client-id>` → `Granted`.
+   Takes up to an hour to apply to live Graph calls. If Tom cannot run
+   PowerShell, Inam runs it with `Connect-ExchangeOnline -Device` and Tom enters
+   the device code himself — no password ever changes hands.
+4. **Cloud environment** (`claude.ai/code` → Environments → `bolst`): add
+   `BOLST_AZURE_CLIENT_SECRET` + `BOLST_AZURE_CLIENT_SECRET_EXPIRES` (or
+   `BOLST_AZURE_CLIENT_CERT_PEM_B64` if the certificate path was used).
+   Keep everything else. Remove
+   `BOLST_GRAPH_TOKEN_JSON_B64` once step 5 passes. The routine prompt needs no
+   change — `setup.sh` recognises the new vars.
+5. **Verify, in this order:** locally `python lib/auth.py --verify` (read-only
+   GET of the inbox; 401/403 = consent or access policy not applied yet) →
+   locally `send_report.py --no-send` → merge to `main` → "Run now" on the
+   routine → Tom receives the report.
+6. **Harden after cutover:** Authentication → "Allow public client flows" → No;
+   remove the delegated Mail.* permissions; delete local `.credentials/token*.json`.
+
+**Rotation (before the credential's end date, zero downtime):** create the new
+secret (or certificate) in Entra *alongside* the old one, update the env var(s)
+in the cloud environment and local `.env`, run `python lib/auth.py --verify`,
+then delete the old credential in Entra. Two can be valid at once. A 24-month
+secret created mid-Sep 2026 ends mid-Sep 2028 → calendar reminder ~mid-Jun 2028;
+the run log warns at 60 days regardless.
+
+**No failure alerting exists (decision 2026-09-11):** the routine platform
+has no notification hooks and an external heartbeat monitor was built and
+then dropped as not wanted. A missing report is noticed by Tom or by checking
+the run log at claude.ai/code/routines; the `[auth]` line there names the
+cause.
+
+**Insurance if consent is delayed:** the §5 device-code renewal still works
+(~2 min with Tom entering the code). It is a stop-gap only — it will die on
+his next password reset.

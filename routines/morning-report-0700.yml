@@ -16,7 +16,8 @@
 name: bolst-morning-report
 description: >
   Send Tom (or Inam during build phase) the daily branded stocklist PDF.
-  Reads all 6 builders LIVE from Tom's Outlook, applies any One Part
+  Reads every builder in lib/builder_roster.py LIVE from Tom's Outlook (8 as
+  of 2026-08), applies any One Part
   picks Tom replied with overnight (via the 06:30 morning poll), routes
   + filters + renders + sends. Skips Sun + Mon morning.
 
@@ -36,16 +37,18 @@ prompt: |
      Clone explicitly with the scoped read-only PAT, then provision:
        git clone https://x-access-token:$GITHUB_PAT@github.com/TommyB-0sss/bolst-stocklist-engine
        cd bolst-stocklist-engine
-       bash setup.sh            # venv + pip install + writes .credentials/token.json
+       bash setup.sh            # venv + pip install (+ legacy token cache if that secret is still set)
        source .venv/bin/activate
-     GITHUB_PAT (fine-grained, Contents:read on this repo only) and
-     BOLST_GRAPH_TOKEN_JSON are Routine env secrets.
+     GITHUB_PAT (fine-grained, Contents:read on this repo only) and the Graph
+     credential are environment secrets. Since 2026-09 the credential is the
+     APP-ONLY certificate BOLST_AZURE_CLIENT_CERT_PEM_B64 (or a client secret);
+     the old BOLST_GRAPH_TOKEN_JSON_B64 user token is legacy (RUNBOOK §9).
 
   1. Compute today's report date in Australia/Melbourne (YYYY-MM-DD).
 
   2. Invoke skills/compose-and-send/send_report.py. The script will:
-       - fetch all 6 builders live from Tom's Outlook
-         (Specialised + Aldrich + Urbane + Hermitage + Aplace + Luxton)
+       - fetch every roster builder live from Tom's Outlook (Specialised,
+         Aldrich, Urbane, Hermitage, Aplace, Luxton, Goldstate, Monaco)
        - read Tom's overnight One Part reply INLINE via
          lib.one_part_collect.collect_picks (searches Tom's Outlook for
          his reply to yesterday's [Bolst One Part - <date>] prompt). No
@@ -63,26 +66,24 @@ prompt: |
   3. Subject: "Bolst Stocklist - {Day} {DayOfMonth} {Month}" (e.g.
      "Bolst Stocklist - Tue 12 May").
 
-  4. Per-builder failure tolerance: if one of the 6 BUILDERS fails to
-     ingest (transient HTTP, format change), the report ships with the
-     remaining 5/6 and notes the missing builder in the email body.
+  4. Per-builder failure tolerance: if one BUILDER fails to ingest
+     (transient HTTP, format change), the report ships with the rest and
+     names the missing builder in the email body.
 
   5. REA listings are MANDATORY (2026-06-02): REA is a weekly file (Tom
      emails himself the CSV each Monday, reused all week). The report uses
      the most recent REA CSV regardless of age, but if NONE is found at
-     all the report is HELD (not sent) and on_failure alerts. This is the
-     one ingest that can block the whole report.
+     all the report is HELD (not sent). This is the one ingest that can
+     block the whole report.
 
-  6. Catastrophic failures (auth lapse, render exception) abort and
-     alert via on_failure below.
+  6. Catastrophic failures (auth lapse, render exception) abort. The
+     platform sends NO notification on failure — the only signals are
+     the run log at claude.ai/code/routines and the report not arriving.
 
-on_success:
-  log: "morning_report_sent"
-  notify: false
-
-on_failure:
-  log: "morning_report_failed"
-  notify: inam@meetapex.ai
+# NOTE (2026-09-11): the routine platform has NO success/failure notification
+# hooks — an earlier on_failure/notify block here was never real, which is how
+# the engine stayed silently dead for weeks. Nothing in this spec can alert;
+# check the run log at claude.ai/code/routines when a report is missing.
 
 # Phase / handover transitions
 notes: |

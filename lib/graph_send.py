@@ -6,9 +6,12 @@ Reused by:
   - skills/compose-and-send/send_report.py  (Stage 9, morning report)
   - skills/one-part-prompt/run.py           (Stage 9, evening One Part prompt to Tom)
 
-The authenticated Graph identity is the SENDER. With our delegated permissions
-(Mail.Send), `POST /me/sendMail` always sends as the signed-in user. The Phase 1
-plan signs in as Tom, so all sends originate from tom@bolstpropertygroup.com.au.
+The SENDER is the mailbox lib.auth resolves for the active mode:
+  - delegated token: `POST /me/sendMail` sends as the signed-in user (Tom)
+  - app-only token:  `POST /users/<BOLST_MAILBOX>/sendMail` sends as that
+    mailbox (Tom), under the application-level Mail.Send permission that the
+    Exchange application access policy restricts to his mailbox (RUNBOOK §9)
+Either way every send originates from tom@bolstpropertygroup.com.au.
 
 Returning the requests.Response keeps callers in control of retry / error reporting.
 """
@@ -21,9 +24,13 @@ from typing import Iterable
 
 import requests
 
-from lib.auth import get_access_token
+from lib.auth import get_access_token, graph_user_base
 
-GRAPH_SENDMAIL_ENDPOINT = "https://graph.microsoft.com/v1.0/me/sendMail"
+
+def sendmail_endpoint() -> str:
+    """sendMail action for the active auth mode — see lib.auth.graph_user_base."""
+    return f"{graph_user_base()}/sendMail"
+
 DEFAULT_TIMEOUT_SECONDS = 30
 
 
@@ -85,7 +92,7 @@ def send_mail(
         "saveToSentItems": save_to_sent_items,
     }
     response = requests.post(
-        GRAPH_SENDMAIL_ENDPOINT,
+        sendmail_endpoint(),
         headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
