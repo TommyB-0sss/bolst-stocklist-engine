@@ -14,3 +14,6 @@ output/
 # Cached mailbox downloads (live builder PDFs/XLSX from Tom's Outlook)
 .cache/
 env-file.md
+
+# Temporary clone created by scheduled task runner
+repo/
