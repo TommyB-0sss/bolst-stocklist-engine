@@ -1895,3 +1895,18 @@ in both places; device-code remains available as the insurance flow.
 **Workflow rule from Inam (same day): all work goes on `dev`, PR dev -> main,
 no new branches.** The one-off `luxton-aplace-interstate` branch was
 fast-forwarded into `dev` (54029ce) and deleted.
+
+**2026-09-17 (Thu) — fresh REA CSV in; 4 new suburbs mapped.**
+Tom sent a current export (`REA CSV 17.9.csv`, 130 listings, flagged
+current-week), so the 16 Sep "Tom sends a fresh REA CSV" item is closed and his
+filename is back to the `REA*` form. The new rows brought 4 unmapped suburbs
+that rendered in bolst-extra fallback with no cover line, understating TOTAL
+PACKAGES by 6: Paynesville 1 + Leongatha 2 (VIC -> `gippsland`), Riverlea Park 1
++ Holden Hill 2 (SA -> `interstate`). Fixed in `config/suburbs.yml` only —
+`COVER_REGION_COUNTS` needed no change, it holds row y-coordinates and both
+regions already had their row. Re-render: 8/8 builders, 634 rows -> 583 kept,
+ZERO warnings; `tests/dump_routing.py` shows 0 uncategorised and 0 unmapped REA
+suburbs. Offline: validate_routing PASS (514), validate_report_pdf PASS (27pp,
+11 regions), validate_a1_counts 0 issues. Luxton again resolved both sheets from
+older emails (6 Jul / 24 Jun) and Aplace logged its optional missing list as an
+info line — both post-PR#4 behaviours working as designed.
