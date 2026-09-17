@@ -120,7 +120,7 @@ suburb_to_region:
   "Ocean Grove":      geelong-colac   # added 2026-05-25 (REA) — Bellarine
   "Winchelsea":       geelong-colac   # borderline-ruled (adjacent to Colac)
 
-  # Gippsland (19)
+  # Gippsland (21)
   "Bunyip":           gippsland       # added 2026-05-25 (REA) — borderline; east of Pakenham, matches Drouin's eastward grouping
   "Drouin":           gippsland
   "Drouin West":      gippsland       # added 2026-08-05 (Goldstate) — adjoining locality ~3km from Drouin, same Baw Baw Shire
@@ -128,10 +128,12 @@ suburb_to_region:
   "Glengarry":        gippsland       # added 2026-05-25 (REA) — Latrobe Valley
   "Grantville":       gippsland
   "Heyfield":         gippsland       # added 2026-05-25 (REA) — Wellington Shire
+  "Leongatha":        gippsland       # added 2026-09-17 (REA) — South Gippsland Shire
   "Lucknow":          gippsland       # added 2026-05-25 (REA) — east of Bairnsdale
   "Moe":              gippsland
   "Morwell":          gippsland
   "Newborough":       gippsland
+  "Paynesville":      gippsland       # added 2026-09-17 (REA) — East Gippsland Shire, south of Bairnsdale
   "Sale":             gippsland       # added 2026-05-25 (REA) — Wellington Shire
   "San Remo":         gippsland       # added 2026-05-25 (REA) — Bass Coast / Phillip Island
   "Stratford":        gippsland       # added 2026-05-25 (REA) — Wellington Shire
@@ -237,9 +239,11 @@ suburb_to_region:
   "Portland":         warrnambool
   "Warrnambool":      warrnambool         # added 2026-05-25 (REA) — region name was missing its self-mapping
 
-  # Interstate (7) — added 2026-09-16 from Tom's 3 Sep Ignite export (13 listings
+  # Interstate (9) — added 2026-09-16 from Tom's 3 Sep Ignite export (13 listings
   # were falling into per-suburb fallback sections with no cover line).
   "Angle Vale":       interstate          # SA — City of Playford, northern Adelaide
+  "Holden Hill":      interstate          # SA — added 2026-09-17; City of Tea Tree Gully, north-east Adelaide
+  "Riverlea Park":    interstate          # SA — added 2026-09-17; Buckland Park estate, City of Playford
   "Gagebrook":        interstate          # TAS — Brighton LGA, north of Hobart
   "George Town":      interstate          # TAS — Tamar Valley
   "Latrobe":          interstate          # TAS — north-west coast (NOT the Latrobe Valley VIC)
