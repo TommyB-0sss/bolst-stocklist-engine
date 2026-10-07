@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash setup.sh)",
+      "Bash(.venv/bin/python skills/compose-and-send/send_report.py)"
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "Bash(bash setup.sh)",
+      "Bash(.venv/bin/python skills/compose-and-send/send_report.py)",
+      "$defaults"
+    ]
+  }
+}
